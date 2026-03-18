@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "mnemos": {
-      "command": "/Users/thohd/Dev/mnemo/mnemos/bin/mnemos",
+      "command": "mnemos",
       "args": [
         "serve"
       ],
