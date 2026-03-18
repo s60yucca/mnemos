@@ -1,0 +1,68 @@
+version: 2
+
+project_name: mnemos
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mnemos
+    main: ./cmd/mnemos
+    binary: mnemos
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: mnemos
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - install.sh
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: mnemos-dev
+    name: mnemos
+  draft: false
+  prerelease: auto
+
+brews:
+  - name: mnemos
+    repository:
+      owner: mnemos-dev
+      name: homebrew-tap
+    homepage: https://github.com/mnemos-dev/mnemos
+    description: Persistent memory engine for AI agents
+    license: MIT
+    install: |
+      bin.install "mnemos"
+    test: |
+      system "#{bin}/mnemos", "version"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

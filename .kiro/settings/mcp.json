@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "mnemos": {
+      "command": "/Users/thohd/Dev/mnemo/mnemos/bin/mnemos",
+      "args": [
+        "serve"
+      ],
+      "env": {
+        "MNEMOS_PROJECT_ID": "mnemo-dev"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "mnemos_search",
+        "mnemos_get",
+        "mnemos_context",
+        "mnemos_stats",
+        "mnemos_store"
+      ]
+    }
+  }
+}
