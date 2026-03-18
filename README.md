@@ -55,14 +55,14 @@ No more re-explaining your project structure every Monday morning.
 
 ```bash
 # curl (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemo/main/mnemos/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
 
 # Homebrew
 brew install mnemos-dev/tap/mnemos
 
 # Build from source (requires Go 1.23+)
-git clone https://github.com/s60yucca/mnemo
-cd mnemo/mnemos && make build
+git clone https://github.com/s60yucca/mnemos
+cd mnemos && make build
 # binary at: bin/mnemos
 ```
 
