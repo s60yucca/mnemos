@@ -41,7 +41,7 @@ checksum:
 
 release:
   github:
-    owner: mnemos-dev
+    owner: s60yucca
     name: mnemos
   draft: false
   prerelease: auto
@@ -49,9 +49,9 @@ release:
 brews:
   - name: mnemos
     repository:
-      owner: mnemos-dev
+      owner: s60yucca
       name: homebrew-tap
-    homepage: https://github.com/mnemos-dev/mnemos
+    homepage: https://github.com/s60yucca/mnemos
     description: Persistent memory engine for AI agents
     license: MIT
     install: |

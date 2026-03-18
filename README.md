@@ -58,7 +58,7 @@ No more re-explaining your project structure every Monday morning.
 curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
 
 # Homebrew
-brew install mnemos-dev/tap/mnemos
+brew install s60yucca/tap/mnemos
 
 # Build from source (requires Go 1.23+)
 git clone https://github.com/s60yucca/mnemos
