@@ -66,12 +66,14 @@ const (
 	RelationTypeDerivedFrom RelationType = "derived_from"
 	RelationTypePartOf      RelationType = "part_of"
 	RelationTypeCausedBy    RelationType = "caused_by"
+	RelationTypeReferences  RelationType = "references" // alias for relates_to
 )
 
 func (r RelationType) IsValid() bool {
 	switch r {
 	case RelationTypeRelatesTo, RelationTypeDependsOn, RelationTypeContradicts,
-		RelationTypeSupersedes, RelationTypeDerivedFrom, RelationTypePartOf, RelationTypeCausedBy:
+		RelationTypeSupersedes, RelationTypeDerivedFrom, RelationTypePartOf, RelationTypeCausedBy,
+		RelationTypeReferences:
 		return true
 	}
 	return false

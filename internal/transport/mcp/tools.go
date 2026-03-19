@@ -59,7 +59,7 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("Create a relation between two memories"),
 		mcp.WithString("source_id", mcp.Required(), mcp.Description("Source memory ID")),
 		mcp.WithString("target_id", mcp.Required(), mcp.Description("Target memory ID")),
-		mcp.WithString("relation_type", mcp.Required(), mcp.Description("Relation type")),
+		mcp.WithString("relation_type", mcp.Required(), mcp.Description("Relation type: relates_to|depends_on|contradicts|supersedes|derived_from|part_of|caused_by")),
 		mcp.WithNumber("strength", mcp.Description("Relation strength [0.0, 1.0]")),
 	), s.handleRelate)
 

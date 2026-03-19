@@ -24,6 +24,7 @@ type Manager struct {
 	mirror     storage.IMarkdownMirror
 	embedQueue chan string
 	embedWg    sync.WaitGroup
+	stopOnce   sync.Once
 	logger     *slog.Logger
 }
 
@@ -280,10 +281,13 @@ func (m *Manager) processEmbedQueue() {
 	}
 }
 
-// Stop closes the embed queue channel and waits for all pending embeddings to complete
+// Stop closes the embed queue channel and waits for all pending embeddings to complete.
+// Safe to call multiple times.
 func (m *Manager) Stop() {
 	if m.embedder != nil {
-		close(m.embedQueue)
+		m.stopOnce.Do(func() {
+			close(m.embedQueue)
+		})
 		m.embedWg.Wait()
 	}
 }
