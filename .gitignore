@@ -1,2 +1,5 @@
 .DS_Store
 dist/
+.kiro/
+~/.mnemos/mirror/
+Dockerfile
