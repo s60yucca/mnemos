@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -11,12 +12,13 @@ import (
 
 // Engine manages memory lifecycle: decay, archival, and GC
 type Engine struct {
-	store           storage.IMemoryStore
-	decayInterval   time.Duration
-	gcRetentionDays int
+	store            storage.IMemoryStore
+	decayInterval    time.Duration
+	gcRetentionDays  int
 	archiveThreshold float64
-	logger          *slog.Logger
-	stopCh          chan struct{}
+	logger           *slog.Logger
+	stopCh           chan struct{}
+	stopOnce         sync.Once
 }
 
 func NewEngine(
@@ -69,7 +71,7 @@ func (e *Engine) Start() {
 
 // Stop halts the background ticker
 func (e *Engine) Stop() {
-	close(e.stopCh)
+	e.stopOnce.Do(func() { close(e.stopCh) })
 }
 
 // RunDecay computes and applies decay scores for all active memories

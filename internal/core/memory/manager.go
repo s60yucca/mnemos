@@ -46,8 +46,10 @@ func NewManager(
 		embedQueue: make(chan string, 1000),
 		logger:     logger,
 	}
-	m.embedWg.Add(1)
-	go m.processEmbedQueue()
+	if embedder != nil {
+		m.embedWg.Add(1)
+		go m.processEmbedQueue()
+	}
 	return m
 }
 
@@ -69,7 +71,7 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 	if existing != nil {
 		// Merge: append new content to existing
 		if simType != "exact" {
-			existing.Content = existing.Content + "\n\n---\n\n" + req.Content
+			existing.Content = mergeContent(existing.Content, req.Content)
 			existing.ContentHash = util.ContentHash(existing.Content, existing.ProjectID)
 			existing.UpdatedAt = time.Now().UTC()
 			if err := m.store.Update(ctx, existing); err != nil {
@@ -280,8 +282,10 @@ func (m *Manager) processEmbedQueue() {
 
 // Stop closes the embed queue channel and waits for all pending embeddings to complete
 func (m *Manager) Stop() {
-	close(m.embedQueue)
-	m.embedWg.Wait()
+	if m.embedder != nil {
+		close(m.embedQueue)
+		m.embedWg.Wait()
+	}
 }
 
 // MergeContent merges new content into existing memory

@@ -130,7 +130,7 @@ func (e *SearchEngine) AssembleContext(ctx context.Context, query, projectID str
 			text = mem.Summary
 		}
 		tokens := estimateTokens(text)
-		if tokenBudget-tokens < 0 {
+		if tokens > tokenBudget {
 			break
 		}
 		tokenBudget -= tokens

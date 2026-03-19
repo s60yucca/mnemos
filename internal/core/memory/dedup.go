@@ -77,11 +77,14 @@ func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash
 	}
 
 	// Tier 3: semantic cosine similarity (only if embedding store available)
+	// Note: full semantic dedup requires embedding the incoming content which is async.
+	// This is intentionally deferred — the embed queue handles it post-store,
+	// and fuzzy Jaccard at tier 2 catches near-duplicates with high recall.
 	if d.embedStore == nil {
 		return nil, "", 0, nil
 	}
 
-	return nil, "", 0, nil // semantic check done at engine level with query vector
+	return nil, "", 0, nil
 }
 
 // FindDuplicates finds potential duplicates for a given memory without merging

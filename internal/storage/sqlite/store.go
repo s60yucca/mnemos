@@ -234,35 +234,35 @@ func (s *SQLiteStore) Stats(ctx context.Context, projectID string) (*storage.Sta
 
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT type, COUNT(*) FROM memories %s GROUP BY type`, where), args...)
 	if err == nil {
-		defer rows.Close()
 		for rows.Next() {
 			var t string
 			var c int
 			rows.Scan(&t, &c) //nolint:errcheck
 			stats.ByType[t] = c
 		}
+		rows.Close()
 	}
 
 	rows2, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT status, COUNT(*) FROM memories %s GROUP BY status`, where), args...)
 	if err == nil {
-		defer rows2.Close()
 		for rows2.Next() {
 			var st string
 			var c int
 			rows2.Scan(&st, &c) //nolint:errcheck
 			stats.ByStatus[st] = c
 		}
+		rows2.Close()
 	}
 
 	rows3, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT category, COUNT(*) FROM memories %s GROUP BY category`, where), args...)
 	if err == nil {
-		defer rows3.Close()
 		for rows3.Next() {
 			var cat string
 			var c int
 			rows3.Scan(&cat, &c) //nolint:errcheck
 			stats.ByCategory[cat] = c
 		}
+		rows3.Close()
 	}
 
 	return stats, nil
@@ -336,7 +336,11 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 	}
 
 	sortBy := q.SortBy
-	if sortBy == "" {
+	allowedSortCols := map[string]bool{
+		"created_at": true, "updated_at": true,
+		"last_accessed_at": true, "relevance_score": true,
+	}
+	if !allowedSortCols[sortBy] {
 		sortBy = "created_at"
 	}
 	dir := "ASC"
