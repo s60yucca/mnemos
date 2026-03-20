@@ -125,8 +125,15 @@ func (s *SQLiteStore) Delete(ctx context.Context, id string) error {
 }
 
 func (s *SQLiteStore) HardDelete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM memories WHERE id=?`, id)
-	return err
+	res, err := s.db.ExecContext(ctx, `DELETE FROM memories WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return &domain.NotFoundError{ID: id}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) BulkUpdateRelevance(ctx context.Context, items []storage.BulkUpdateItem) error {
@@ -183,6 +190,10 @@ func (s *SQLiteStore) ListForLifecycle(ctx context.Context, q storage.LifecycleQ
 	if q.LastAccessBefore != nil {
 		conditions = append(conditions, "last_accessed_at<?")
 		args = append(args, util.TimeToUnixNano(*q.LastAccessBefore))
+	}
+	if q.UpdatedBefore != nil {
+		conditions = append(conditions, "updated_at<?")
+		args = append(args, util.TimeToUnixNano(*q.UpdatedBefore))
 	}
 	if len(q.Statuses) > 0 {
 		ph := strings.Repeat("?,", len(q.Statuses))
@@ -268,7 +279,7 @@ func (s *SQLiteStore) Stats(ctx context.Context, projectID string) (*storage.Sta
 	return stats, nil
 }
 
-func (s *SQLiteStore) Close() error  { return s.db.Close() }
+func (s *SQLiteStore) Close() error                   { return s.db.Close() }
 func (s *SQLiteStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
 // --- helpers ---
@@ -381,7 +392,7 @@ func scanMemory(row scanner) (*domain.Memory, error) {
 	m.UpdatedAt = util.UnixNanoToTime(updatedAt)
 	m.LastAccessedAt = util.UnixNanoToTime(lastAccessedAt)
 
-	json.Unmarshal([]byte(tagsJSON), &m.Tags)   //nolint:errcheck
+	json.Unmarshal([]byte(tagsJSON), &m.Tags)     //nolint:errcheck
 	json.Unmarshal([]byte(metaJSON), &m.Metadata) //nolint:errcheck
 
 	return &m, nil

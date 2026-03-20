@@ -85,6 +85,14 @@ func TestSQLiteStore_SoftDelete(t *testing.T) {
 	assert.Equal(t, domain.MemoryStatusDeleted, got.Status)
 }
 
+func TestSQLiteStore_HardDeleteMissingReturnsNotFound(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	err := store.HardDelete(ctx, "nonexistent")
+	assert.ErrorIs(t, err, domain.ErrNotFound)
+}
+
 func TestSQLiteStore_List(t *testing.T) {
 	store := newTestDB(t)
 	ctx := context.Background()

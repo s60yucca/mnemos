@@ -131,8 +131,12 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 			ProjectID: projectID,
 			Limit:     limit,
 		})
-	default:
+	case "semantic":
+		results, err = s.mnemos.SemanticSearch(ctx, query, projectID, limit, 0.5)
+	case "hybrid", "":
 		results, err = s.mnemos.Search(ctx, query, projectID, limit)
+	default:
+		return mcpError("mode must be one of: text, semantic, hybrid"), nil
 	}
 
 	if err != nil {

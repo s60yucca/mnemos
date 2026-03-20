@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
@@ -45,7 +46,7 @@ func (s *Server) handleMemoriesResource(ctx context.Context, req mcp.ReadResourc
 
 	memories, err := s.mnemos.List(ctx, storage.ListQuery{
 		ProjectID: projectID,
-		Statuses:  nil, // active by default handled in query
+		Statuses:  []domain.MemoryStatus{domain.MemoryStatusActive},
 		Limit:     100,
 	})
 	if err != nil {

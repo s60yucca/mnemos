@@ -14,12 +14,12 @@ import (
 
 // Mnemos is the main facade that wires all engines together
 type Mnemos struct {
-	memManager  *coremem.Manager
+	memManager   *coremem.Manager
 	searchEngine *search.SearchEngine
-	relManager  *relation.Manager
-	lifecycle   *lifecycle.Engine
-	store       storage.IMemoryStore
-	logger      *slog.Logger
+	relManager   *relation.Manager
+	lifecycle    *lifecycle.Engine
+	store        storage.IMemoryStore
+	logger       *slog.Logger
 }
 
 // NewMnemos constructs the Mnemos facade with all dependencies
@@ -74,6 +74,11 @@ func (m *Mnemos) List(ctx context.Context, q storage.ListQuery) ([]*domain.Memor
 // Search performs hybrid search
 func (m *Mnemos) Search(ctx context.Context, query, projectID string, limit int) ([]*storage.SearchResult, error) {
 	return m.searchEngine.HybridSearch(ctx, query, projectID, limit)
+}
+
+// SemanticSearch performs vector similarity search only
+func (m *Mnemos) SemanticSearch(ctx context.Context, query, projectID string, limit int, minSim float64) ([]*storage.SearchResult, error) {
+	return m.searchEngine.SemanticSearch(ctx, query, projectID, limit, minSim)
 }
 
 // TextSearch performs full-text search only

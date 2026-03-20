@@ -104,6 +104,7 @@ func (h *handlers) listMemories(w http.ResponseWriter, r *http.Request) {
 
 	memories, err := h.mnemos.List(r.Context(), storage.ListQuery{
 		ProjectID: q.Get("project_id"),
+		Statuses:  []domain.MemoryStatus{domain.MemoryStatusActive},
 		Limit:     limit,
 		Offset:    offset,
 		SortBy:    "created_at",
@@ -145,8 +146,13 @@ func (h *handlers) searchMemories(w http.ResponseWriter, r *http.Request) {
 			ProjectID: body.ProjectID,
 			Limit:     body.Limit,
 		})
-	default:
+	case "semantic":
+		results, err = h.mnemos.SemanticSearch(r.Context(), body.Query, body.ProjectID, body.Limit, 0.5)
+	case "", "hybrid":
 		results, err = h.mnemos.Search(r.Context(), body.Query, body.ProjectID, body.Limit)
+	default:
+		writeError(w, http.StatusBadRequest, "mode must be one of: text, semantic, hybrid")
+		return
 	}
 
 	if err != nil {

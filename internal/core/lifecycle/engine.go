@@ -140,10 +140,10 @@ func (e *Engine) RunArchival(ctx context.Context, projectID string) error {
 func (e *Engine) RunGC(ctx context.Context, projectID string) error {
 	cutoff := time.Now().UTC().AddDate(0, 0, -e.gcRetentionDays)
 	memories, err := e.store.ListForLifecycle(ctx, storage.LifecycleQuery{
-		ProjectID:        projectID,
-		Statuses:         []domain.MemoryStatus{domain.MemoryStatusDeleted},
-		LastAccessBefore: &cutoff,
-		Limit:            1000,
+		ProjectID:     projectID,
+		Statuses:      []domain.MemoryStatus{domain.MemoryStatusDeleted},
+		UpdatedBefore: &cutoff,
+		Limit:         1000,
 	})
 	if err != nil {
 		return err

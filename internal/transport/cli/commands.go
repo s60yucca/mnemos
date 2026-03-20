@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	core "github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	mcptransport "github.com/mnemos-dev/mnemos/internal/transport/mcp"
+	"github.com/spf13/cobra"
 )
 
 func newJSONEncoder(w io.Writer) *json.Encoder {
@@ -129,8 +129,12 @@ func newSearchCmd(m *core.Mnemos) *cobra.Command {
 					ProjectID: projectID,
 					Limit:     limit,
 				})
-			default:
+			case "semantic":
+				results, err = m.SemanticSearch(context.Background(), query, projectID, limit, 0.5)
+			case "", "hybrid":
 				results, err = m.Search(context.Background(), query, projectID, limit)
+			default:
+				return fmt.Errorf("mode must be one of: text, semantic, hybrid")
 			}
 			if err != nil {
 				return err
@@ -150,7 +154,7 @@ func newSearchCmd(m *core.Mnemos) *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&limit, "limit", "n", 10, "max results")
-	cmd.Flags().StringVar(&mode, "mode", "hybrid", "search mode: text|hybrid")
+	cmd.Flags().StringVar(&mode, "mode", "hybrid", "search mode: text|semantic|hybrid")
 	return cmd
 }
 

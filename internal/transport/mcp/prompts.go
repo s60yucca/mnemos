@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mnemos-dev/mnemos/internal/storage"
@@ -30,6 +31,11 @@ func (s *Server) handleLoadContextPrompt(ctx context.Context, req mcp.GetPromptR
 	query := req.Params.Arguments["query"]
 	projectID := req.Params.Arguments["project_id"]
 	maxTokens := 4000
+	if raw := req.Params.Arguments["max_tokens"]; raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			maxTokens = parsed
+		}
+	}
 
 	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, true)
 	if err != nil {

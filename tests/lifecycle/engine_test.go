@@ -87,6 +87,20 @@ func TestEngine_RunGC_KeepsRecentDeleted(t *testing.T) {
 	assert.Equal(t, mem.ID, got.ID)
 }
 
+func TestEngine_RunGC_UsesDeleteTimeNotLastAccessTime(t *testing.T) {
+	engine, store := newTestEngine(t)
+	ctx := context.Background()
+
+	mem := createMemoryWithAge(t, store, "old but recently deleted", "", 24*90, domain.MemoryStatusActive)
+	require.NoError(t, store.Delete(ctx, mem.ID))
+
+	require.NoError(t, engine.RunGC(ctx, ""))
+
+	got, err := store.GetByID(ctx, mem.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.MemoryStatusDeleted, got.Status)
+}
+
 func TestEngine_Stop_SafeMultipleCalls(t *testing.T) {
 	engine, _ := newTestEngine(t)
 	engine.Start()
