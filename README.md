@@ -2,9 +2,11 @@
 
 > Your AI agent has the memory of a goldfish. Mnemos fixes that.
 
-A persistent memory engine for AI coding agents. Single Go binary, zero runtime dependencies, MCP-native.
+A persistent memory engine for AI coding agents.
 
-Mnemos stores, searches, and manages memories across sessions using embedded SQLite — no external services, no Docker, no cloud, no Python, no Node.js. Just one binary and a `.db` file.
+Mnemos gives Claude Code, Kiro, Cursor, Windsurf, and other MCP clients a memory that survives across sessions: architecture decisions, bug root causes, project conventions, and non-obvious implementation details.
+
+Single Go binary. Embedded SQLite. Zero runtime dependencies. No Docker. No cloud. No Python. No Node.
 
 ```
 Agent (Claude Code / Kiro / Cursor / Windsurf / ...)
@@ -18,9 +20,16 @@ SQLite + FTS5 (~/.mnemos/mnemos.db)
 
 ## What does it actually do?
 
-Every time your agent learns something worth keeping — an architecture decision, a bug fix, a project convention — it calls `mnemos_store`. Next session, it calls `mnemos_context` and gets that knowledge back, as if it never forgot.
+Every time your agent learns something worth keeping, it stores it in Mnemos. Next session, it can pull that context back before it starts coding.
 
-No more re-explaining your project structure every Monday morning.
+That means:
+
+- fewer repeated explanations
+- less re-discovery of old bugs and decisions
+- more continuity across sessions
+- better context for long-running projects
+
+No more re-explaining your project structure every Monday morning. No more rediscovering the same environment quirk three times in one week.
 
 **The memory lifecycle:**
 
@@ -29,6 +38,42 @@ No more re-explaining your project structure every Monday morning.
 3. Mnemos deduplicates, classifies, and indexes it
 4. Next session: `mnemos_context` assembles relevant memories within a token budget
 5. Agent picks up right where it left off
+
+---
+
+## Why it feels different
+
+Mnemos is built for real coding workflows, not just generic note storage.
+
+- `MCP-native`: designed to be called directly by coding agents
+- `Fast to install`: one binary, one local database
+- `Actually useful retrieval`: FTS + optional semantic search + context assembly
+- `Lifecycle aware`: deduplication, relevance decay, archive/GC
+- `Readable by humans too`: optional Markdown mirror
+- `Ready for autopilot`: works best when paired with Claude Code prompts or Kiro steering
+
+---
+
+## Quick Start
+
+```bash
+# install
+curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
+
+# first-time setup
+mnemos init
+
+# run as MCP server
+mnemos serve
+```
+
+Then connect it from Claude Code or Kiro and teach the agent to:
+
+1. call `mnemos_context` at task start
+2. call `mnemos_search` before targeted implementation
+3. call `mnemos_store` after durable learnings
+
+If you want that to happen consistently, use the autopilot setup below.
 
 ---
 
@@ -75,6 +120,31 @@ mnemos init
 
 ---
 
+## Autopilot First
+
+Mnemos is an MCP server, not an agent controller.
+
+That distinction matters:
+
+- installing the server gives the agent access to memory
+- steering, prompts, or plugins make the agent use memory consistently
+
+If you want Mnemos to feel automatic, the best current paths are:
+
+- `Claude Code`: pair Mnemos with a reusable session prompt
+- `Kiro`: pair Mnemos with a steering file and tool auto-approve
+
+The recommended policy is simple:
+
+1. At session start, call `mnemos_context` once.
+2. Before targeted implementation, call `mnemos_search`.
+3. After meaningful completed work, call `mnemos_store` once if the learning is durable.
+4. Skip low-value memories.
+
+The full policy lives in [docs/autopilot.md](/Users/thohd/Dev/mnemos/docs/autopilot.md).
+
+---
+
 ## Use with Claude Code
 
 Add to `~/.claude.json` (global) or `.mcp.json` in your project root:
@@ -95,7 +165,16 @@ Add to `~/.claude.json` (global) or `.mcp.json` in your project root:
 
 Restart Claude Code. Mnemos tools appear automatically.
 
-For near-autopilot behavior, add a reusable session instruction based on [templates/claude/SYSTEM_PROMPT.md](/Users/thohd/Dev/mnemos/templates/claude/SYSTEM_PROMPT.md). Claude Code will not reliably use Mnemos just because the MCP server exists; it needs explicit instruction to load context at session start and store durable learnings after meaningful work.
+Claude Code will not reliably use Mnemos just because the MCP server exists. If you want near-autopilot behavior, add a reusable session instruction based on [templates/claude/SYSTEM_PROMPT.md](/Users/thohd/Dev/mnemos/templates/claude/SYSTEM_PROMPT.md).
+
+Recommended Claude Code flow:
+
+1. At the start of a new task or session, call `mnemos_context` once with the current task, bug, feature, or subsystem as the query.
+2. Before coding in a specific area, call `mnemos_search` if targeted memory could affect the implementation.
+3. After a meaningful change, call `mnemos_store` once if the work produced a durable learning.
+4. Do not store temporary plans, obvious code summaries, or task chatter.
+
+This is the same pattern used by workflow plugins: the MCP server provides capability, but the client prompt or plugin must make its usage mandatory.
 
 ---
 
@@ -122,6 +201,13 @@ Add to `~/.kiro/settings/mcp.json` (global) or `.kiro/settings/mcp.json` in your
 For automatic memory usage on every session, add a steering file at `.kiro/steering/mnemos.md` telling the agent to call `mnemos_context` at session start and `mnemos_store` when it learns something. Kiro will follow it automatically.
 
 You can start from [templates/kiro/steering/mnemos.md](/Users/thohd/Dev/mnemos/templates/kiro/steering/mnemos.md).
+
+Recommended Kiro flow:
+
+1. Install Mnemos as an MCP server.
+2. Auto-approve read-oriented tools: `mnemos_context`, `mnemos_search`, `mnemos_get`.
+3. Add the steering file so Kiro automatically loads memory at task start.
+4. Keep `mnemos_store` manual at first if you want to watch memory quality, then auto-approve writes once the workflow is stable.
 
 ---
 
@@ -154,6 +240,30 @@ Mnemos is an MCP server, not an agent controller. Automatic usage depends on cli
 
 - Claude Code: use a strong reusable session prompt so Claude calls `mnemos_context` at task start, `mnemos_search` before targeted work, and `mnemos_store` after durable learnings.
 - Kiro: use a steering file plus auto-approve for read-oriented Mnemos tools.
+- Generic MCP clients: Mnemos can expose the tools, but if the client does not support steering, plugins, or strong reusable prompts, memory usage will remain inconsistent.
+
+**Recommended default policy**
+
+- Session start: call `mnemos_context` once with a `1500-3000` token budget.
+- Before targeted implementation: call `mnemos_search` with the subsystem, bug, or feature name.
+- After meaningful completion: call `mnemos_store` once for durable learnings only.
+- Prefer no memory over a weak memory.
+
+**Good things to store**
+
+- architecture decisions
+- bug root causes
+- project conventions
+- important implementation constraints
+- deployment or environment gotchas
+
+**Do not store**
+
+- temporary plans
+- raw diffs
+- obvious code descriptions
+- work-in-progress notes
+- conversational filler
 
 The full recommended policy is in [docs/autopilot.md](/Users/thohd/Dev/mnemos/docs/autopilot.md).
 
