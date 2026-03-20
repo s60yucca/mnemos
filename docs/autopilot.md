@@ -74,7 +74,7 @@ Recommended behavior:
 - before implementation: call `mnemos_search` if the task references a subsystem, feature, bug, or file area
 - session end or after major step: call `mnemos_store` once if there is a durable learning
 
-Use the template in [templates/claude/SYSTEM_PROMPT.md](/Users/thohd/Dev/mnemos/templates/claude/SYSTEM_PROMPT.md).
+Use the template in [templates/claude/SYSTEM_PROMPT.md](./mnemos/templates/claude/SYSTEM_PROMPT.md).
 
 ## Kiro
 
@@ -94,7 +94,7 @@ Suggested auto-approve set:
 
 Keep `mnemos_store` manual at first if you want to watch write quality. After the prompts are stable, auto-approve writes too.
 
-Use the template in [templates/kiro/steering/mnemos.md](/Users/thohd/Dev/mnemos/templates/kiro/steering/mnemos.md).
+Use the template in [templates/kiro/steering/mnemos.md](./templates/kiro/steering/mnemos.md).
 
 ## Recommended Defaults
 
