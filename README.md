@@ -165,7 +165,7 @@ Add to `~/.claude.json` (global) or `.mcp.json` in your project root:
 
 Restart Claude Code. Mnemos tools appear automatically.
 
-Claude Code will not reliably use Mnemos just because the MCP server exists. If you want near-autopilot behavior, add a reusable session instruction based on [templates/claude/SYSTEM_PROMPT.md](/Users/thohd/Dev/mnemos/templates/claude/SYSTEM_PROMPT.md).
+Claude Code will not reliably use Mnemos just because the MCP server exists. If you want near-autopilot behavior, add a reusable session instruction based on [templates/claude/SYSTEM_PROMPT.md](./templates/claude/SYSTEM_PROMPT.md).
 
 Recommended Claude Code flow:
 
@@ -200,7 +200,7 @@ Add to `~/.kiro/settings/mcp.json` (global) or `.kiro/settings/mcp.json` in your
 
 For automatic memory usage on every session, add a steering file at `.kiro/steering/mnemos.md` telling the agent to call `mnemos_context` at session start and `mnemos_store` when it learns something. Kiro will follow it automatically.
 
-You can start from [templates/kiro/steering/mnemos.md](/Users/thohd/Dev/mnemos/templates/kiro/steering/mnemos.md).
+You can start from [templates/kiro/steering/mnemos.md](./templates/kiro/steering/mnemos.md).
 
 Recommended Kiro flow:
 
@@ -265,7 +265,7 @@ Mnemos is an MCP server, not an agent controller. Automatic usage depends on cli
 - work-in-progress notes
 - conversational filler
 
-The full recommended policy is in [docs/autopilot.md](/Users/thohd/Dev/mnemos/docs/autopilot.md).
+The full recommended policy is in [docs/autopilot.md](./mnemos/docs/autopilot.md).
 
 ---
 
