@@ -94,7 +94,7 @@ Suggested auto-approve set:
 
 Keep `mnemos_store` manual at first if you want to watch write quality. After the prompts are stable, auto-approve writes too.
 
-Use the template in [templates/kiro/steering/mnemos.md](./templates/kiro/steering/mnemos.md).
+Use the template in [templates/kiro/steering/mnemos.md](../templates/kiro/steering/mnemos.md).
 
 ## Recommended Defaults
 
