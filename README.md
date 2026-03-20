@@ -141,7 +141,7 @@ The recommended policy is simple:
 3. After meaningful completed work, call `mnemos_store` once if the learning is durable.
 4. Skip low-value memories.
 
-The full policy lives in [docs/autopilot.md](/Users/thohd/Dev/mnemos/docs/autopilot.md).
+The full policy lives in [docs/autopilot.md](./docs/autopilot.md).
 
 ---
 
