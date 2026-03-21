@@ -50,7 +50,7 @@ Mnemos is built for real coding workflows, not just generic note storage.
 - `Actually useful retrieval`: FTS + optional semantic search + context assembly
 - `Lifecycle aware`: deduplication, relevance decay, archive/GC
 - `Readable by humans too`: optional Markdown mirror
-- `Ready for autopilot`: works best when paired with Claude Code prompts or Kiro steering
+- `Autopilot ready`: one setup command wires hooks + steering for Claude, Kiro, or Cursor
 
 ---
 
@@ -58,7 +58,7 @@ Mnemos is built for real coding workflows, not just generic note storage.
 
 ```bash
 # install
-curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mnemos-dev/mnemos/main/install.sh | bash
 
 # first-time setup
 mnemos init
@@ -67,13 +67,93 @@ mnemos init
 mnemos serve
 ```
 
-Then connect it from Claude Code or Kiro and teach the agent to:
+Then wire it to your AI client — or use autopilot setup to make it fully automatic.
 
-1. call `mnemos_context` at task start
-2. call `mnemos_search` before targeted implementation
-3. call `mnemos_store` after durable learnings
+---
 
-If you want that to happen consistently, use the autopilot setup below.
+## Autopilot Setup
+
+Mnemos is an MCP server, not an agent controller. By default, the agent only uses memory if it's instructed to. **Autopilot** closes that gap: one command injects hook config, steering files, and MCP config so the agent uses memory automatically on every session — no reminding needed.
+
+```bash
+# Claude Code
+mnemos setup claude
+
+# Kiro
+mnemos setup kiro
+
+# Cursor
+mnemos setup cursor
+```
+
+That's it. From that point:
+
+- **Session start** — Mnemos automatically loads relevant context into the agent's window
+- **During work** — Mnemos searches memory when the topic changes
+- **Session end** — Mnemos verifies memory was captured and cleans up state
+
+Use `--global` to install for all projects instead of just the current one:
+
+```bash
+mnemos setup claude --global
+```
+
+Use `--force` to overwrite existing config files without prompting:
+
+```bash
+mnemos setup claude --force
+```
+
+### What `mnemos setup` writes
+
+**Claude Code** (`mnemos setup claude`):
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Steering instructions — tells Claude when and what to store |
+| `.claude/hooks.json` | Hook config — wires session-start, prompt-submit, session-end |
+| `.mcp.json` | MCP server config — registers `mnemos serve` |
+
+**Kiro** (`mnemos setup kiro`):
+
+| File | Purpose |
+|------|---------|
+| `.kiro/steering/mnemos.md` | Steering file — auto-loaded by Kiro on every session |
+| `.kiro/mcp.json` | MCP server config |
+
+**Cursor** (`mnemos setup cursor`):
+
+| File | Purpose |
+|------|---------|
+| `.cursorrules` | Steering instructions for Cursor |
+| `.mcp.json` | MCP server config |
+
+### How autopilot works under the hood
+
+Autopilot uses two complementary systems:
+
+**Hooks (deterministic)** — `mnemos hook session-start/prompt-submit/session-end`
+
+These are short-lived processes called by the AI client at specific lifecycle events. They run in `InitLight` mode (no background workers, cold start < 50ms) and always exit 0 — they never interrupt the agent session.
+
+- `session-start`: assembles relevant context from Mnemos and injects it into the agent's window
+- `prompt-submit`: detects topic changes using Jaccard similarity; searches memory when the topic shifts; respects a 5-minute cooldown per topic to avoid noise
+- `session-end`: counts memories stored during the session; optionally leaves a breadcrumb; cleans up session state
+
+**Steering (LLM-guided)** — `CLAUDE.md` / `.kiro/steering/mnemos.md` / `.cursorrules`
+
+These files instruct the agent on *what* to store and *when*. The agent makes the semantic judgment — hooks handle the mechanical retrieval.
+
+```
+Session start  →  hook injects context  →  agent reads it
+During work    →  hook searches on topic change  →  agent receives results
+               →  agent discovers durable learning  →  agent calls mnemos_store via MCP
+Session end    →  hook verifies coverage  →  state cleanup
+```
+
+### Session state
+
+Each session gets its own state file at `.mnemos/sessions/session-<id>.json` (falls back to `~/.mnemos/sessions/` if no local `.mnemos/` dir exists). Stale and orphaned sessions are cleaned up automatically.
 
 ---
 
@@ -92,6 +172,7 @@ If you want that to happen consistently, use the autopilot setup below.
 | Human-readable Markdown mirror | ✅ | ❌ | ❌ | ✅ |
 | Works with Kiro / Cursor / Windsurf | ❌ | ✅ | ✅ | ✅ |
 | No Python / Node runtime required | ✅ | ✅ | ❌ | ✅ |
+| One-command autopilot setup | ❌ | ❌ | ❌ | ✅ |
 | Written in Go | ❌ | ✅ | ❌ (Python) | ✅ |
 
 ---
@@ -100,13 +181,13 @@ If you want that to happen consistently, use the autopilot setup below.
 
 ```bash
 # curl (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mnemos-dev/mnemos/main/install.sh | bash
 
 # Homebrew
-brew install s60yucca/tap/mnemos
+brew install mnemos-dev/tap/mnemos
 
 # Build from source (requires Go 1.23+)
-git clone https://github.com/s60yucca/mnemos
+git clone https://github.com/mnemos-dev/mnemos
 cd mnemos && make build
 # binary at: bin/mnemos
 ```
@@ -120,34 +201,19 @@ mnemos init
 
 ---
 
-## Autopilot First
-
-Mnemos is an MCP server, not an agent controller.
-
-That distinction matters:
-
-- installing the server gives the agent access to memory
-- steering, prompts, or plugins make the agent use memory consistently
-
-If you want Mnemos to feel automatic, the best current paths are:
-
-- `Claude Code`: pair Mnemos with a reusable session prompt
-- `Kiro`: pair Mnemos with a steering file and tool auto-approve
-
-The recommended policy is simple:
-
-1. At session start, call `mnemos_context` once.
-2. Before targeted implementation, call `mnemos_search`.
-3. After meaningful completed work, call `mnemos_store` once if the learning is durable.
-4. Skip low-value memories.
-
-The full policy lives in [docs/autopilot.md](./docs/autopilot.md).
-
----
-
 ## Use with Claude Code
 
-Add to `~/.claude.json` (global) or `.mcp.json` in your project root:
+**Autopilot (recommended):**
+
+```bash
+mnemos setup claude
+```
+
+This writes `CLAUDE.md`, `.claude/hooks.json`, and `.mcp.json` in one shot. Restart Claude Code and memory is fully automatic.
+
+**Manual setup:**
+
+Add to `.mcp.json` in your project root:
 
 ```json
 {
@@ -163,24 +229,23 @@ Add to `~/.claude.json` (global) or `.mcp.json` in your project root:
 }
 ```
 
-Restart Claude Code. Mnemos tools appear automatically.
-
-Claude Code will not reliably use Mnemos just because the MCP server exists. If you want near-autopilot behavior, add a reusable session instruction based on [templates/claude/SYSTEM_PROMPT.md](./templates/claude/SYSTEM_PROMPT.md).
-
-Recommended Claude Code flow:
-
-1. At the start of a new task or session, call `mnemos_context` once with the current task, bug, feature, or subsystem as the query.
-2. Before coding in a specific area, call `mnemos_search` if targeted memory could affect the implementation.
-3. After a meaningful change, call `mnemos_store` once if the work produced a durable learning.
-4. Do not store temporary plans, obvious code summaries, or task chatter.
-
-This is the same pattern used by workflow plugins: the MCP server provides capability, but the client prompt or plugin must make its usage mandatory.
+Then add a session instruction based on [templates/claude/CLAUDE.md](./templates/claude/CLAUDE.md).
 
 ---
 
 ## Use with Kiro
 
-Add to `~/.kiro/settings/mcp.json` (global) or `.kiro/settings/mcp.json` in your workspace:
+**Autopilot (recommended):**
+
+```bash
+mnemos setup kiro
+```
+
+This writes `.kiro/steering/mnemos.md` and `.kiro/mcp.json`. Kiro picks up the steering file automatically on every session.
+
+**Manual setup:**
+
+Add to `.kiro/settings/mcp.json`:
 
 ```json
 {
@@ -198,22 +263,19 @@ Add to `~/.kiro/settings/mcp.json` (global) or `.kiro/settings/mcp.json` in your
 }
 ```
 
-For automatic memory usage on every session, add a steering file at `.kiro/steering/mnemos.md` telling the agent to call `mnemos_context` at session start and `mnemos_store` when it learns something. Kiro will follow it automatically.
-
-You can start from [templates/kiro/steering/mnemos.md](./templates/kiro/steering/mnemos.md).
-
-Recommended Kiro flow:
-
-1. Install Mnemos as an MCP server.
-2. Auto-approve read-oriented tools: `mnemos_context`, `mnemos_search`, `mnemos_get`.
-3. Add the steering file so Kiro automatically loads memory at task start.
-4. Keep `mnemos_store` manual at first if you want to watch memory quality, then auto-approve writes once the workflow is stable.
+Copy [templates/kiro/steering/mnemos.md](./templates/kiro/steering/mnemos.md) to `.kiro/steering/mnemos.md`.
 
 ---
 
 ## Use with Cursor / Windsurf / any MCP client
 
-Same JSON config — mnemos speaks standard MCP over stdio. Works with any client that supports MCP tools.
+**Autopilot:**
+
+```bash
+mnemos setup cursor
+```
+
+**Manual:** Same JSON MCP config as above — mnemos speaks standard MCP over stdio.
 
 ---
 
@@ -233,39 +295,6 @@ Same JSON config — mnemos speaks standard MCP over stdio. Works with any clien
 **Resources**: `mnemos://memories/{project_id}`, `mnemos://stats`
 
 **Prompts**: `load_context` (session start), `save_session` (session end)
-
-## Autopilot
-
-Mnemos is an MCP server, not an agent controller. Automatic usage depends on client-side steering.
-
-- Claude Code: use a strong reusable session prompt so Claude calls `mnemos_context` at task start, `mnemos_search` before targeted work, and `mnemos_store` after durable learnings.
-- Kiro: use a steering file plus auto-approve for read-oriented Mnemos tools.
-- Generic MCP clients: Mnemos can expose the tools, but if the client does not support steering, plugins, or strong reusable prompts, memory usage will remain inconsistent.
-
-**Recommended default policy**
-
-- Session start: call `mnemos_context` once with a `1500-3000` token budget.
-- Before targeted implementation: call `mnemos_search` with the subsystem, bug, or feature name.
-- After meaningful completion: call `mnemos_store` once for durable learnings only.
-- Prefer no memory over a weak memory.
-
-**Good things to store**
-
-- architecture decisions
-- bug root causes
-- project conventions
-- important implementation constraints
-- deployment or environment gotchas
-
-**Do not store**
-
-- temporary plans
-- raw diffs
-- obvious code descriptions
-- work-in-progress notes
-- conversational filler
-
-The full recommended policy is in [docs/autopilot.md](./mnemos/docs/autopilot.md).
 
 ---
 
@@ -287,6 +316,18 @@ mnemos maintain                                       # decay + GC
 mnemos serve                                          # start MCP server (stdio)
 mnemos serve --rest --port 8080                       # start REST server
 mnemos version                                        # print version
+
+# Autopilot setup
+mnemos setup claude                                   # setup for Claude Code
+mnemos setup kiro                                     # setup for Kiro
+mnemos setup cursor                                   # setup for Cursor
+mnemos setup claude --global                          # install globally (home dir)
+mnemos setup claude --force                           # overwrite without prompting
+
+# Hook subcommands (called automatically by AI clients — not for manual use)
+mnemos hook session-start
+mnemos hook prompt-submit
+mnemos hook session-end
 ```
 
 Global flags: `--project <id>`, `--config <path>`, `--log-level debug|info|warn|error`
@@ -346,6 +387,14 @@ lifecycle:
 mirror:
   enabled: false          # set true to write human-readable Markdown files
   base_dir: ~/.mnemos/mirror
+
+hook:
+  enabled: true
+  search_cooldown: 5m
+  session_start_max_tokens: 2000
+  prompt_search_limit: 5
+  stale_timeout: 1h
+  log_level: warn
 ```
 
 Environment variables override config — prefix with `MNEMOS_`:
@@ -399,10 +448,13 @@ Benchmarked on macOS (Apple M-series), SQLite WAL mode, embeddings disabled (noo
 | `search` hybrid (RRF) | 42 ms | 39 ms | FTS + noop vector |
 | `list` | 34 ms | 26 ms | sorted by created_at |
 | `maintain` (decay+GC) | 27 ms | 108 ms | full table scan |
+| hook session-start | < 200 ms | — | cold start, InitLight |
+| hook prompt-submit | < 100 ms | — | cold start, InitLight |
+| hook session-end | < 100 ms | — | cold start, InitLight |
 | binary size | 12 MB | — | single static binary |
 | startup time | ~50 ms | — | cold start |
 
-Most operations stay under 60 ms regardless of dataset size. With semantic embeddings enabled, `store` adds ~50–200 ms per memory for embedding generation — search quality improves significantly.
+Most operations stay under 60 ms regardless of dataset size. Hook subcommands use `InitLight` mode — no background workers start, keeping latency low enough to not interrupt agent sessions.
 
 ---
 
