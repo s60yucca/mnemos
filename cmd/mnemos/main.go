@@ -8,8 +8,8 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/config"
 	core "github.com/mnemos-dev/mnemos/internal/core"
-	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
+	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/core/relation"
 	"github.com/mnemos-dev/mnemos/internal/core/search"
 	"github.com/mnemos-dev/mnemos/internal/embedding"
@@ -95,6 +95,8 @@ func main() {
 
 	// CLI
 	rootCmd := cli.NewRootCmd(mnemos, version)
+	rootCmd.AddCommand(newHookCmd(cfg))
+	rootCmd.AddCommand(newSetupCmd())
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)

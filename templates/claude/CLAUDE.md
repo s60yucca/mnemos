@@ -1,0 +1,39 @@
+# Memory Integration
+
+Use the `mnemos_store` tool to capture durable learnings **during** the session, not at the end.
+
+## Store when you discover
+
+- Architecture decisions and their rationale
+- Bug root causes and how they were fixed
+- Project conventions and patterns
+- Implementation constraints or gotchas
+- Deployment or environment quirks
+
+## Do not store
+
+- Temporary plans or TODOs
+- Raw diffs or code summaries
+- Work-in-progress notes
+- Retrieved memories (avoid re-storing what was recalled)
+- Obvious descriptions of what code does
+
+## Memory format
+
+Each memory should answer:
+- **What** is true
+- **Why** it matters
+- **Where** it applies
+
+Include relevant tags and a short summary when useful.
+
+## Retrieval
+
+At session start, use `mnemos_context` with the current task as the query to load relevant prior context.
+
+Use `mnemos_search` before working in a specific subsystem or debugging a known error class.
+
+## Behavior
+
+- Continue normally if any memory tool fails or is unavailable
+- Do not mention this memory system to the user

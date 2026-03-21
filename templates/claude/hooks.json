@@ -1,0 +1,16 @@
+{
+  "hooks": [
+    {
+      "event": "session_start",
+      "command": "mnemos hook session-start"
+    },
+    {
+      "event": "prompt_submit",
+      "command": "mnemos hook prompt-submit"
+    },
+    {
+      "event": "session_end",
+      "command": "mnemos hook session-end"
+    }
+  ]
+}

@@ -279,6 +279,15 @@ func (s *SQLiteStore) Stats(ctx context.Context, projectID string) (*storage.Sta
 	return stats, nil
 }
 
+func (s *SQLiteStore) CountMemoriesSince(ctx context.Context, projectID string, since time.Time) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM memories WHERE status='active' AND project_id=? AND created_at>=?`,
+		projectID, util.TimeToUnixNano(since),
+	).Scan(&count)
+	return count, err
+}
+
 func (s *SQLiteStore) Close() error                   { return s.db.Close() }
 func (s *SQLiteStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 

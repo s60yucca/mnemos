@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
 )
@@ -14,11 +15,12 @@ type IMemoryStore interface {
 	List(ctx context.Context, q ListQuery) ([]*domain.Memory, error)
 	Count(ctx context.Context, q ListQuery) (int, error)
 	Update(ctx context.Context, m *domain.Memory) error
-	Delete(ctx context.Context, id string) error   // soft delete
+	Delete(ctx context.Context, id string) error // soft delete
 	HardDelete(ctx context.Context, id string) error
 	BulkUpdateRelevance(ctx context.Context, items []BulkUpdateItem) error
 	BulkUpdateStatus(ctx context.Context, ids []string, status domain.MemoryStatus) error
 	ListForLifecycle(ctx context.Context, q LifecycleQuery) ([]*domain.Memory, error)
+	CountMemoriesSince(ctx context.Context, projectID string, since time.Time) (int, error)
 	Stats(ctx context.Context, projectID string) (*Stats, error)
 	Close() error
 	Ping(ctx context.Context) error

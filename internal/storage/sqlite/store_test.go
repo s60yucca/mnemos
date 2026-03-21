@@ -137,3 +137,73 @@ func TestSQLiteStore_Stats(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, stats.Total, 3)
 }
+
+// TestProp_CountMemoriesSinceCorrect verifies Property 14:
+// CountMemoriesSince returns exactly the count of active memories for a project
+// created at or after the given time.
+//
+// Feature: mnemos-autopilot, Property 14: CountMemoriesSince counts correctly
+func TestProp_CountMemoriesSinceCorrect(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	projectID := "prop-count-project"
+	otherProject := "other-project"
+
+	// Create memories at known times
+	past := time.Now().Add(-2 * time.Hour)
+	recent := time.Now().Add(-30 * time.Minute)
+
+	// 3 old memories (before cutoff)
+	for i := 0; i < 3; i++ {
+		mem := newTestMemory("old memory")
+		mem.ProjectID = projectID
+		mem.CreatedAt = past
+		mem.UpdatedAt = past
+		mem.LastAccessedAt = past
+		require.NoError(t, store.Create(ctx, mem))
+	}
+
+	// 2 recent memories (after cutoff)
+	for i := 0; i < 2; i++ {
+		mem := newTestMemory("recent memory")
+		mem.ProjectID = projectID
+		mem.CreatedAt = recent
+		mem.UpdatedAt = recent
+		mem.LastAccessedAt = recent
+		require.NoError(t, store.Create(ctx, mem))
+	}
+
+	// 1 recent memory for a different project (should not be counted)
+	otherMem := newTestMemory("other project memory")
+	otherMem.ProjectID = otherProject
+	otherMem.CreatedAt = recent
+	otherMem.UpdatedAt = recent
+	otherMem.LastAccessedAt = recent
+	require.NoError(t, store.Create(ctx, otherMem))
+
+	// 1 deleted recent memory (should not be counted)
+	deletedMem := newTestMemory("deleted memory")
+	deletedMem.ProjectID = projectID
+	deletedMem.CreatedAt = recent
+	deletedMem.UpdatedAt = recent
+	deletedMem.LastAccessedAt = recent
+	require.NoError(t, store.Create(ctx, deletedMem))
+	require.NoError(t, store.Delete(ctx, deletedMem.ID))
+
+	// Cutoff: 1 hour ago — should count only the 2 recent active memories
+	cutoff := time.Now().Add(-1 * time.Hour)
+	count, err := store.CountMemoriesSince(ctx, projectID, cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count, "should count only recent active memories for the project")
+
+	// Cutoff far in the past — should count all 5 active memories for the project
+	allCount, err := store.CountMemoriesSince(ctx, projectID, past.Add(-1*time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, 5, allCount, "should count all active memories when cutoff is before all")
+
+	// Cutoff in the future — should count 0
+	futureCount, err := store.CountMemoriesSince(ctx, projectID, time.Now().Add(1*time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, 0, futureCount, "should count 0 when cutoff is in the future")
+}

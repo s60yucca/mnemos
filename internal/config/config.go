@@ -10,14 +10,15 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	DataDir   string          `mapstructure:"data_dir"`
-	LogLevel  string          `mapstructure:"log_level"`
-	LogFormat string          `mapstructure:"log_format"`
+	DataDir    string          `mapstructure:"data_dir"`
+	LogLevel   string          `mapstructure:"log_level"`
+	LogFormat  string          `mapstructure:"log_format"`
 	Embeddings EmbeddingConfig `mapstructure:"embeddings"`
-	Mirror    MirrorConfig    `mapstructure:"mirror"`
-	Lifecycle LifecycleConfig `mapstructure:"lifecycle"`
-	Dedup     DedupConfig     `mapstructure:"dedup"`
-	Server    ServerConfig    `mapstructure:"server"`
+	Mirror     MirrorConfig    `mapstructure:"mirror"`
+	Lifecycle  LifecycleConfig `mapstructure:"lifecycle"`
+	Dedup      DedupConfig     `mapstructure:"dedup"`
+	Server     ServerConfig    `mapstructure:"server"`
+	Hook       HookConfig      `mapstructure:"hook"`
 }
 
 type EmbeddingConfig struct {
@@ -35,9 +36,9 @@ type MirrorConfig struct {
 }
 
 type LifecycleConfig struct {
-	DecayInterval   time.Duration `mapstructure:"decay_interval"`
-	GCRetentionDays int           `mapstructure:"gc_retention_days"`
-	ArchiveThreshold float64      `mapstructure:"archive_threshold"`
+	DecayInterval    time.Duration `mapstructure:"decay_interval"`
+	GCRetentionDays  int           `mapstructure:"gc_retention_days"`
+	ArchiveThreshold float64       `mapstructure:"archive_threshold"`
 }
 
 type DedupConfig struct {
@@ -48,6 +49,19 @@ type DedupConfig struct {
 type ServerConfig struct {
 	Port    int    `mapstructure:"port"`
 	MCPMode string `mapstructure:"mcp_mode"` // "stdio", "sse"
+}
+
+type HookConfig struct {
+	Enabled                  bool          `mapstructure:"enabled"`
+	SessionDir               string        `mapstructure:"session_dir"`
+	StaleTimeout             time.Duration `mapstructure:"stale_timeout"`
+	CleanupRetention         time.Duration `mapstructure:"cleanup_retention"`
+	SearchCooldown           time.Duration `mapstructure:"search_cooldown"`
+	TopicSimilarityThreshold float64       `mapstructure:"topic_similarity_threshold"`
+	SessionEndBreadcrumb     bool          `mapstructure:"session_end_breadcrumb"`
+	SessionStartMaxTokens    int           `mapstructure:"session_start_max_tokens"`
+	PromptSearchLimit        int           `mapstructure:"prompt_search_limit"`
+	LogLevel                 string        `mapstructure:"log_level"`
 }
 
 // DefaultConfig returns sensible defaults
@@ -80,6 +94,18 @@ func DefaultConfig() *Config {
 			Port:    8080,
 			MCPMode: "stdio",
 		},
+		Hook: HookConfig{
+			Enabled:                  true,
+			SessionDir:               "sessions",
+			StaleTimeout:             1 * time.Hour,
+			CleanupRetention:         24 * time.Hour,
+			SearchCooldown:           5 * time.Minute,
+			TopicSimilarityThreshold: 0.3,
+			SessionEndBreadcrumb:     false,
+			SessionStartMaxTokens:    2000,
+			PromptSearchLimit:        5,
+			LogLevel:                 "warn",
+		},
 	}
 }
 
@@ -104,6 +130,16 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	v.SetDefault("dedup.semantic_threshold", cfg.Dedup.SemanticThreshold)
 	v.SetDefault("server.port", cfg.Server.Port)
 	v.SetDefault("server.mcp_mode", cfg.Server.MCPMode)
+	v.SetDefault("hook.enabled", cfg.Hook.Enabled)
+	v.SetDefault("hook.session_dir", cfg.Hook.SessionDir)
+	v.SetDefault("hook.stale_timeout", cfg.Hook.StaleTimeout)
+	v.SetDefault("hook.cleanup_retention", cfg.Hook.CleanupRetention)
+	v.SetDefault("hook.search_cooldown", cfg.Hook.SearchCooldown)
+	v.SetDefault("hook.topic_similarity_threshold", cfg.Hook.TopicSimilarityThreshold)
+	v.SetDefault("hook.session_end_breadcrumb", cfg.Hook.SessionEndBreadcrumb)
+	v.SetDefault("hook.session_start_max_tokens", cfg.Hook.SessionStartMaxTokens)
+	v.SetDefault("hook.prompt_search_limit", cfg.Hook.PromptSearchLimit)
+	v.SetDefault("hook.log_level", cfg.Hook.LogLevel)
 
 	v.SetEnvPrefix("MNEMOS")
 	v.AutomaticEnv()
