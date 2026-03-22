@@ -91,10 +91,11 @@ type BulkUpdateItem struct {
 
 // Stats holds aggregate storage statistics
 type Stats struct {
-	Total       int            `json:"total"`
-	ByType      map[string]int `json:"by_type"`
-	ByStatus    map[string]int `json:"by_status"`
-	ByCategory  map[string]int `json:"by_category"`
-	ProjectID   string         `json:"project_id,omitempty"`
-	DBSizeBytes int64          `json:"db_size_bytes,omitempty"`
+	Total           int            `json:"total"`
+	ByType          map[string]int `json:"by_type"`
+	ByStatus        map[string]int `json:"by_status"`
+	ByCategory      map[string]int `json:"by_category"`
+	ProjectID       string         `json:"project_id,omitempty"`
+	DBSizeBytes     int64          `json:"db_size_bytes,omitempty"`
+	AvgQualityScore float64        `json:"avg_quality_score,omitempty"`
 }

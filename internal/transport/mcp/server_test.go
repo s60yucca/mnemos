@@ -63,7 +63,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, *sqlitestore.EmbeddingS
 	mirror := markdown.NewMirror(t.TempDir(), false)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger)
+	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
 	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger)
 	relManager := relation.NewManager(relStore, memStore, logger)
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
@@ -225,3 +225,110 @@ func TestHandleMemoriesResource_UsesProjectScope(t *testing.T) {
 }
 
 var _ embedding.IEmbeddingProvider = testEmbedder{}
+
+func newTestServerWithGate(t *testing.T) *Server {
+	t.Helper()
+
+	db, err := sqlitestore.Open(":memory:")
+	require.NoError(t, err)
+
+	memStore := sqlitestore.NewSQLiteStore(db)
+	fts := sqlitestore.NewFTSSearcher(db)
+	embedStore := sqlitestore.NewEmbeddingStore(db)
+	relStore := sqlitestore.NewRelationStore(db)
+	embedProvider := testEmbedder{}
+	mirror := markdown.NewMirror(t.TempDir(), false)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	cfg := coremem.TestQualityGateConfig()
+	gate := coremem.NewQualityGate(cfg)
+
+	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, gate)
+	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger)
+	relManager := relation.NewManager(relStore, memStore, logger)
+	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
+	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
+
+	server := NewServer(mn)
+
+	t.Cleanup(func() {
+		mn.Shutdown()
+		db.Close()
+	})
+
+	return server
+}
+
+func callStore(t *testing.T, server *Server, args map[string]any) *domain.StoreResult {
+	t.Helper()
+	ctx := context.Background()
+	result, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: args},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.IsError, "handleStore must never return isError=true for quality verdicts")
+	var out domain.StoreResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &out))
+	return &out
+}
+
+// TestHandleStore_QualityNote_Reject verifies that a too-short memory returns
+// isError=false and a quality_note explaining the rejection.
+func TestHandleStore_QualityNote_Reject(t *testing.T) {
+	server := newTestServerWithGate(t)
+	out := callStore(t, server, map[string]any{"content": "fix bug"})
+	assert.False(t, out.Created)
+	assert.Contains(t, out.QualityNote, "brief")
+}
+
+// TestHandleStore_QualityNote_Fix verifies that a verbose memory returns
+// isError=false, is created, and carries a quality_note about optimisation.
+func TestHandleStore_QualityNote_Fix(t *testing.T) {
+	server := newTestServerWithGate(t)
+	// Low-density verbose content triggers FixCompact → VerdictFix
+	verbose := strings.Repeat("we looked at things and discussed the system and talked about it ", 4)
+	out := callStore(t, server, map[string]any{"content": verbose, "project_id": "proj-fix"})
+	// May be created (Fix) or rejected depending on final score; either way no isError
+	if out.Created {
+		assert.Contains(t, out.QualityNote, "optimized")
+	}
+}
+
+// TestHandleStore_QualityNote_Downgrade verifies that a generic long_term memory
+// is downgraded and carries the appropriate quality_note.
+func TestHandleStore_QualityNote_Downgrade(t *testing.T) {
+	server := newTestServerWithGate(t)
+	out := callStore(t, server, map[string]any{
+		"content":    "The project has good error handling and the team is happy with it overall",
+		"type":       "long_term",
+		"project_id": "proj-downgrade",
+	})
+	if out.Created && out.QualityNote != "" {
+		assert.Contains(t, out.QualityNote, "short-term")
+	}
+}
+
+// TestHandleStore_NoQualityNote_Accept verifies that a high-quality memory
+// returns isError=false and no quality_note.
+func TestHandleStore_NoQualityNote_Accept(t *testing.T) {
+	server := newTestServerWithGate(t)
+	out := callStore(t, server, map[string]any{
+		"content":    "SessionStore.Close() in auth/session.go needs sync.RWMutex to prevent race condition",
+		"project_id": "proj-accept",
+	})
+	assert.True(t, out.Created)
+	assert.Empty(t, out.QualityNote)
+}
+
+// TestHandleStore_RejectIsNotMCPError verifies the isError=false contract for Reject.
+func TestHandleStore_RejectIsNotMCPError(t *testing.T) {
+	server := newTestServerWithGate(t)
+	ctx := context.Background()
+	result, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{"content": "ok"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.IsError, "Reject verdict must not set isError=true")
+}

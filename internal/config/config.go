@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -10,15 +11,35 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	DataDir    string          `mapstructure:"data_dir"`
-	LogLevel   string          `mapstructure:"log_level"`
-	LogFormat  string          `mapstructure:"log_format"`
-	Embeddings EmbeddingConfig `mapstructure:"embeddings"`
-	Mirror     MirrorConfig    `mapstructure:"mirror"`
-	Lifecycle  LifecycleConfig `mapstructure:"lifecycle"`
-	Dedup      DedupConfig     `mapstructure:"dedup"`
-	Server     ServerConfig    `mapstructure:"server"`
-	Hook       HookConfig      `mapstructure:"hook"`
+	DataDir     string            `mapstructure:"data_dir"`
+	LogLevel    string            `mapstructure:"log_level"`
+	LogFormat   string            `mapstructure:"log_format"`
+	Embeddings  EmbeddingConfig   `mapstructure:"embeddings"`
+	Mirror      MirrorConfig      `mapstructure:"mirror"`
+	Lifecycle   LifecycleConfig   `mapstructure:"lifecycle"`
+	Dedup       DedupConfig       `mapstructure:"dedup"`
+	Server      ServerConfig      `mapstructure:"server"`
+	Hook        HookConfig        `mapstructure:"hook"`
+	QualityGate QualityGateConfig `mapstructure:"quality_gate"`
+}
+
+// QualityGateConfig holds configuration for the memory quality gate pipeline stage.
+type QualityGateConfig struct {
+	Enabled            bool               `mapstructure:"enabled"`
+	MinWords           int                `mapstructure:"min_words"`
+	MaxWords           int                `mapstructure:"max_words"`
+	MinDensity         float64            `mapstructure:"min_density"`
+	DuplicateThreshold float64            `mapstructure:"duplicate_threshold"`
+	RequireSpecific    bool               `mapstructure:"require_specific"`
+	Penalties          map[string]float64 `mapstructure:"penalties"`
+	ScoreBands         ScoreBandsConfig   `mapstructure:"score_bands"`
+}
+
+// ScoreBandsConfig defines the score thresholds for quality gate verdicts.
+type ScoreBandsConfig struct {
+	Accept    float64 `mapstructure:"accept"`    // default 0.8
+	Fix       float64 `mapstructure:"fix"`       // default 0.5
+	Downgrade float64 `mapstructure:"downgrade"` // default 0.3
 }
 
 type EmbeddingConfig struct {
@@ -106,6 +127,26 @@ func DefaultConfig() *Config {
 			PromptSearchLimit:        5,
 			LogLevel:                 "warn",
 		},
+		QualityGate: QualityGateConfig{
+			Enabled:            true,
+			MinWords:           5,
+			MaxWords:           200,
+			MinDensity:         0.3,
+			DuplicateThreshold: 0.8,
+			RequireSpecific:    true,
+			Penalties: map[string]float64{
+				"too_short":      1.0,
+				"too_long":       0.1,
+				"low_density":    0.3,
+				"near_duplicate": 0.4,
+				"too_generic":    0.2,
+			},
+			ScoreBands: ScoreBandsConfig{
+				Accept:    0.8,
+				Fix:       0.5,
+				Downgrade: 0.3,
+			},
+		},
 	}
 }
 
@@ -166,4 +207,34 @@ func LoadConfig(cfgFile string) (*Config, error) {
 // DBPath returns the path to the SQLite database file
 func (c *Config) DBPath() string {
 	return filepath.Join(c.DataDir, "mnemos.db")
+}
+
+// Validate checks that the configuration values are within acceptable ranges.
+func (c *Config) Validate() error {
+	qg := c.QualityGate
+	if !qg.Enabled {
+		return nil
+	}
+	if qg.MinWords <= 0 {
+		return fmt.Errorf("quality_gate.min_words must be > 0, got %d", qg.MinWords)
+	}
+	if qg.MaxWords <= qg.MinWords {
+		return fmt.Errorf("quality_gate.max_words (%d) must be > min_words (%d)", qg.MaxWords, qg.MinWords)
+	}
+	if qg.MinDensity <= 0 || qg.MinDensity >= 1 {
+		return fmt.Errorf("quality_gate.min_density must be in (0,1), got %f", qg.MinDensity)
+	}
+	if qg.DuplicateThreshold <= 0 || qg.DuplicateThreshold >= 1 {
+		return fmt.Errorf("quality_gate.duplicate_threshold must be in (0,1), got %f", qg.DuplicateThreshold)
+	}
+	sb := qg.ScoreBands
+	if !(sb.Accept > sb.Fix && sb.Fix > sb.Downgrade && sb.Downgrade > 0) {
+		return fmt.Errorf("quality_gate.score_bands must satisfy accept > fix > downgrade > 0, got accept=%f fix=%f downgrade=%f", sb.Accept, sb.Fix, sb.Downgrade)
+	}
+	for k, v := range qg.Penalties {
+		if v < 0 || v > 1 {
+			return fmt.Errorf("quality_gate.penalties[%s] must be in [0,1], got %f", k, v)
+		}
+	}
+	return nil
 }

@@ -2,8 +2,17 @@ package util
 
 import (
 	"math"
+	"regexp"
 	"strings"
 	"unicode"
+)
+
+// Compiled regex patterns for HasProjectSpecificIdentifiers — compiled once at package init.
+var (
+	reCamelCase  = regexp.MustCompile(`[a-z][a-zA-Z]*[A-Z][a-zA-Z]*`)
+	reFilePath   = regexp.MustCompile(`[\w/]+\.\w{1,4}`)
+	reUpperSnake = regexp.MustCompile(`[A-Z][A-Z_]{2,}`)
+	reDottedCall = regexp.MustCompile(`\w+\.\w+\(\)`)
 )
 
 var stopWords = map[string]struct{}{
@@ -98,4 +107,82 @@ func ShingleSimilarity(a, b string, k int) float64 {
 	shA := Shingles(tokA, k)
 	shB := Shingles(tokB, k)
 	return JaccardSimilarity(shA, shB)
+}
+
+// CountWords returns the number of whitespace-separated words in text.
+// Empty string returns 0.
+func CountWords(text string) int {
+	return len(strings.Fields(text))
+}
+
+// InformationDensity returns the ratio of unique meaningful words to total words.
+// Formula: count(unique meaningful words) / count(total words)
+// Meaningful = not in StopWords. Range: [0.0, 1.0]. Returns 0.0 for empty string.
+func InformationDensity(text string) float64 {
+	total := CountWords(text)
+	if total == 0 {
+		return 0.0
+	}
+	// Count unique meaningful words (not in StopWords, after lowercasing and stripping punctuation)
+	unique := make(map[string]struct{})
+	for _, word := range strings.Fields(text) {
+		clean := strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				return unicode.ToLower(r)
+			}
+			return -1
+		}, word)
+		if len(clean) > 1 && !StopWords[clean] {
+			unique[clean] = struct{}{}
+		}
+	}
+	density := float64(len(unique)) / float64(total)
+	if density > 1.0 {
+		return 1.0
+	}
+	return density
+}
+
+// HasProjectSpecificIdentifiers returns true if text contains at least one of:
+//   - camelCase word:   [a-z][a-zA-Z]*[A-Z][a-zA-Z]*  (sessionStore, handleAuth)
+//   - file path:        [\w/]+\.\w{1,4}                (auth/middleware.go)
+//   - UPPER_SNAKE key:  [A-Z][A-Z_]{2,}               (JWT_SECRET)
+//   - dotted call:      \w+\.\w+\(\)                   (store.Close())
+//
+// All four patterns are compiled once at package init and reused.
+func HasProjectSpecificIdentifiers(text string) bool {
+	return reCamelCase.MatchString(text) ||
+		reFilePath.MatchString(text) ||
+		reUpperSnake.MatchString(text) ||
+		reDottedCall.MatchString(text)
+}
+
+// CompactContent removes filler phrases and collapses whitespace.
+// Step 1: Remove filler phrases (case-insensitive, longest-first).
+// Step 2: Collapse multiple spaces/newlines to a single space.
+// Step 3: If result is shorter than original, return result; else return original.
+// Never returns empty string — falls back to original if compaction produces nothing.
+func CompactContent(text string) string {
+	if text == "" {
+		return text
+	}
+	result := text
+	for _, phrase := range FillerPhrases {
+		lowerPhrase := strings.ToLower(phrase)
+		for {
+			idx := strings.Index(strings.ToLower(result), lowerPhrase)
+			if idx == -1 {
+				break
+			}
+			result = result[:idx] + result[idx+len(phrase):]
+		}
+	}
+	// Collapse multiple whitespace characters (spaces, tabs, newlines) to single space
+	fields := strings.Fields(result)
+	result = strings.Join(fields, " ")
+	result = strings.TrimSpace(result)
+	if result == "" || len(result) >= len(text) {
+		return text
+	}
+	return result
 }

@@ -49,7 +49,7 @@ func TestContentDedup_ExactMatch(t *testing.T) {
 	require.NoError(t, store.Create(ctx, mem))
 
 	req := &domain.StoreRequest{Content: content, ProjectID: "proj1"}
-	existing, simType, score, err := dedup.Check(ctx, req, hash)
+	existing, simType, score, _, err := dedup.Check(ctx, req, hash)
 	require.NoError(t, err)
 	assert.NotNil(t, existing)
 	assert.Equal(t, "exact", simType)
@@ -69,7 +69,7 @@ func TestContentDedup_FuzzyMatch(t *testing.T) {
 	similar := "PostgreSQL is the primary database with connection pooling"
 	newHash := util.ContentHash(similar, "proj1")
 	req := &domain.StoreRequest{Content: similar, ProjectID: "proj1"}
-	existing, simType, score, err := dedup.Check(ctx, req, newHash)
+	existing, simType, score, _, err := dedup.Check(ctx, req, newHash)
 	require.NoError(t, err)
 	assert.NotNil(t, existing)
 	assert.Equal(t, "fuzzy", simType)
@@ -87,7 +87,7 @@ func TestContentDedup_NoDupDifferentProject(t *testing.T) {
 
 	req := &domain.StoreRequest{Content: content, ProjectID: "proj2"}
 	hash := util.ContentHash(content, "proj2")
-	existing, _, _, err := dedup.Check(ctx, req, hash)
+	existing, _, _, _, err := dedup.Check(ctx, req, hash)
 	require.NoError(t, err)
 	assert.Nil(t, existing)
 }
@@ -102,7 +102,7 @@ func TestContentDedup_BelowThreshold(t *testing.T) {
 
 	req := &domain.StoreRequest{Content: "Kubernetes orchestrates container deployments", ProjectID: "proj1"}
 	hash := util.ContentHash(req.Content, "proj1")
-	existing, _, _, err := dedup.Check(ctx, req, hash)
+	existing, _, _, _, err := dedup.Check(ctx, req, hash)
 	require.NoError(t, err)
 	assert.Nil(t, existing)
 }

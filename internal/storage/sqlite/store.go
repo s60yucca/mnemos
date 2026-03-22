@@ -29,15 +29,15 @@ func (s *SQLiteStore) Create(ctx context.Context, m *domain.Memory) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO memories
 		(id, content, summary, type, category, tags, source, project_id, agent, session_id,
-		 metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, status, content_hash)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, quality_score, status, content_hash)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ID, m.Content, m.Summary, string(m.Type), m.Category,
 		string(tags), m.Source, m.ProjectID, m.Agent, m.SessionID,
 		string(meta),
 		util.TimeToUnixNano(m.CreatedAt),
 		util.TimeToUnixNano(m.UpdatedAt),
 		util.TimeToUnixNano(m.LastAccessedAt),
-		m.AccessCount, m.RelevanceScore, string(m.Status), m.ContentHash,
+		m.AccessCount, m.RelevanceScore, m.QualityScore, string(m.Status), m.ContentHash,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -90,13 +90,13 @@ func (s *SQLiteStore) Update(ctx context.Context, m *domain.Memory) error {
 		UPDATE memories SET
 		content=?, summary=?, type=?, category=?, tags=?, source=?,
 		metadata=?, updated_at=?, last_accessed_at=?, access_count=?,
-		relevance_score=?, status=?, content_hash=?
+		relevance_score=?, quality_score=?, status=?, content_hash=?
 		WHERE id=?`,
 		m.Content, m.Summary, string(m.Type), m.Category, string(tags), m.Source,
 		string(meta),
 		util.TimeToUnixNano(m.UpdatedAt),
 		util.TimeToUnixNano(m.LastAccessedAt),
-		m.AccessCount, m.RelevanceScore, string(m.Status), m.ContentHash,
+		m.AccessCount, m.RelevanceScore, m.QualityScore, string(m.Status), m.ContentHash,
 		m.ID,
 	)
 	if err != nil {
@@ -276,6 +276,14 @@ func (s *SQLiteStore) Stats(ctx context.Context, projectID string) (*storage.Sta
 		rows3.Close()
 	}
 
+	var avgQuality float64
+	activeWhere := "WHERE status='active'"
+	if projectID != "" {
+		activeWhere = "WHERE project_id=? AND status='active'"
+	}
+	s.db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(AVG(quality_score), 1.0) FROM memories %s`, activeWhere), args...).Scan(&avgQuality) //nolint:errcheck
+	stats.AvgQualityScore = avgQuality
+
 	return stats, nil
 }
 
@@ -389,7 +397,7 @@ func scanMemory(row scanner) (*domain.Memory, error) {
 		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
 		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
 		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash,
+		&m.AccessCount, &m.RelevanceScore, &m.QualityScore, &mStatus, &m.ContentHash,
 	)
 	if err != nil {
 		return nil, err

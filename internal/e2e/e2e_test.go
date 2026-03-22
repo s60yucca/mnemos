@@ -8,8 +8,8 @@ import (
 	"time"
 
 	core "github.com/mnemos-dev/mnemos/internal/core"
-	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
+	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/core/relation"
 	"github.com/mnemos-dev/mnemos/internal/core/search"
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -35,7 +35,7 @@ func newTestMnemos(t *testing.T) *core.Mnemos {
 	mirror := markdown.NewMirror(t.TempDir(), false)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger)
+	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
 	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger)
 	relManager := relation.NewManager(relStore, memStore, logger)
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)

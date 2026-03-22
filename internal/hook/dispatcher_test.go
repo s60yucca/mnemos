@@ -41,7 +41,7 @@ func newTestMnemos(t *testing.T) *core.Mnemos {
 	mir := markdown.NewMirror(t.TempDir(), false)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	memMgr := memory.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger)
+	memMgr := memory.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger, nil)
 	t.Cleanup(func() { memMgr.Stop() })
 
 	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger)

@@ -10,14 +10,14 @@ import (
 
 // Deduplicator checks for duplicate memories
 type Deduplicator interface {
-	Check(ctx context.Context, req *domain.StoreRequest, hash string) (*domain.Memory, string, float64, error)
+	Check(ctx context.Context, req *domain.StoreRequest, hash string) (*domain.Memory, string, float64, []*domain.Memory, error)
 }
 
 // ContentDedup implements 3-tier deduplication
 type ContentDedup struct {
-	store          storage.IMemoryStore
-	embedStore     storage.IEmbeddingStore
-	fuzzyThreshold   float64
+	store             storage.IMemoryStore
+	embedStore        storage.IEmbeddingStore
+	fuzzyThreshold    float64
 	semanticThreshold float64
 }
 
@@ -36,16 +36,17 @@ func NewContentDedup(store storage.IMemoryStore, embedStore storage.IEmbeddingSt
 	}
 }
 
-// Check runs the 3-tier dedup pipeline. Returns (existing, similarityType, score, error).
-// Returns nil if no duplicate found.
-func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash string) (*domain.Memory, string, float64, error) {
+// Check runs the 3-tier dedup pipeline. Returns (existing, similarityType, score, recent, error).
+// recent is the list of up to 200 most recent active memories fetched during tier-2 check.
+// Returns nil existing if no duplicate found. recent may be nil if exact match found in tier 1.
+func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash string) (*domain.Memory, string, float64, []*domain.Memory, error) {
 	// Tier 1: exact hash match
 	existing, err := d.store.GetByHash(ctx, hash)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, nil, err
 	}
 	if existing != nil {
-		return existing, "exact", 1.0, nil
+		return existing, "exact", 1.0, nil, nil
 	}
 
 	// Tier 2: fuzzy Jaccard similarity
@@ -57,7 +58,7 @@ func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash
 		SortDesc:  true,
 	})
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, nil, err
 	}
 
 	tokA := util.TokenSet(util.Tokenize(req.Content))
@@ -73,7 +74,7 @@ func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash
 		}
 	}
 	if bestFuzzy != nil {
-		return bestFuzzy, "fuzzy", bestFuzzyScore, nil
+		return bestFuzzy, "fuzzy", bestFuzzyScore, recent, nil
 	}
 
 	// Tier 3: semantic cosine similarity (only if embedding store available)
@@ -81,10 +82,10 @@ func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash
 	// This is intentionally deferred — the embed queue handles it post-store,
 	// and fuzzy Jaccard at tier 2 catches near-duplicates with high recall.
 	if d.embedStore == nil {
-		return nil, "", 0, nil
+		return nil, "", 0, recent, nil
 	}
 
-	return nil, "", 0, nil
+	return nil, "", 0, recent, nil
 }
 
 // FindDuplicates finds potential duplicates for a given memory without merging

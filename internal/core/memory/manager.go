@@ -21,6 +21,7 @@ type Manager struct {
 	embedder   embedding.IEmbeddingProvider
 	classifier Classifier
 	dedup      *ContentDedup
+	gate       *QualityGate
 	mirror     storage.IMarkdownMirror
 	embedQueue chan string
 	embedWg    sync.WaitGroup
@@ -28,7 +29,8 @@ type Manager struct {
 	logger     *slog.Logger
 }
 
-// NewManager creates a new memory Manager
+// NewManager creates a new memory Manager.
+// gate may be nil; when nil the quality gate step is skipped entirely.
 func NewManager(
 	store storage.IMemoryStore,
 	embedStore storage.IEmbeddingStore,
@@ -36,6 +38,7 @@ func NewManager(
 	mirror storage.IMarkdownMirror,
 	fuzzyThreshold, semanticThreshold float64,
 	logger *slog.Logger,
+	gate *QualityGate,
 ) *Manager {
 	m := &Manager{
 		store:      store,
@@ -43,6 +46,7 @@ func NewManager(
 		embedder:   embedder,
 		classifier: NewRuleClassifier(),
 		dedup:      NewContentDedup(store, embedStore, fuzzyThreshold, semanticThreshold),
+		gate:       gate,
 		mirror:     mirror,
 		embedQueue: make(chan string, 1000),
 		logger:     logger,
@@ -65,7 +69,7 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 	hash := util.ContentHash(req.Content, req.ProjectID)
 
 	// 3. Dedup check
-	existing, simType, score, err := m.dedup.Check(ctx, req, hash)
+	existing, simType, score, recent, err := m.dedup.Check(ctx, req, hash)
 	if err != nil {
 		return nil, fmt.Errorf("dedup check: %w", err)
 	}
@@ -81,6 +85,18 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 		}
 		m.logger.Debug("dedup hit", "id", existing.ID, "type", simType, "score", score)
 		return &domain.StoreResult{Memory: existing, Created: false}, nil
+	}
+
+	// 3.5 Quality gate — reuse recent slice from dedup, no extra DB query
+	qualityScore := 1.0
+	qualityNote := ""
+	if m.gate != nil {
+		verdict := m.gate.Evaluate(req, recent)
+		qualityScore = verdict.Score
+		qualityNote = qualityNoteForVerdict(verdict)
+		if result, err := m.applyQualityFixes(req, verdict); result != nil || err != nil {
+			return result, err
+		}
 	}
 
 	// 4. Auto-classify
@@ -112,6 +128,7 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 		LastAccessedAt: now,
 		AccessCount:    0,
 		RelevanceScore: 1.0,
+		QualityScore:   qualityScore,
 		Status:         domain.MemoryStatusActive,
 		ContentHash:    hash,
 	}
@@ -138,7 +155,7 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 	}
 
 	// 9. Return result
-	return &domain.StoreResult{Memory: mem, Created: true}, nil
+	return &domain.StoreResult{Memory: mem, Created: true, QualityNote: qualityNote}, nil
 }
 
 // Get retrieves a memory by ID and increments access count
@@ -290,6 +307,156 @@ func (m *Manager) Stop() {
 		})
 		m.embedWg.Wait()
 	}
+}
+
+// first2Sentences returns the first two sentences from text, split on ". " or ".\n".
+// Used as a placeholder summary until the auto-summarization spec is implemented.
+func first2Sentences(text string) string {
+	// Split on sentence boundaries: ". " or ".\n"
+	var sentences []string
+	remaining := text
+	for len(sentences) < 2 && len(remaining) > 0 {
+		idx := -1
+		for i := 0; i < len(remaining)-1; i++ {
+			if remaining[i] == '.' && (remaining[i+1] == ' ' || remaining[i+1] == '\n') {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			// No more sentence boundaries — treat the rest as the last sentence
+			sentences = append(sentences, strings.TrimSpace(remaining))
+			break
+		}
+		sentences = append(sentences, strings.TrimSpace(remaining[:idx+1]))
+		remaining = strings.TrimSpace(remaining[idx+2:])
+	}
+	return strings.Join(sentences, " ")
+}
+
+// fixCompact compacts req.Content using CompactContent.
+// If the result is empty, logs a warning and leaves req.Content unchanged.
+func (m *Manager) fixCompact(req *domain.StoreRequest) {
+	compacted := util.CompactContent(req.Content)
+	if compacted == "" {
+		m.logger.Warn("quality fix compact produced empty content, skipping", "content_preview", truncateStr(req.Content, 80))
+		return
+	}
+	req.Content = compacted
+}
+
+// fixSummarize sets req.Summary to the first 2 sentences of req.Content.
+// req.Content is left unchanged.
+func (m *Manager) fixSummarize(req *domain.StoreRequest) {
+	req.Summary = first2Sentences(req.Content)
+}
+
+// fixDowngrade sets req.Type to short_term and appends the "auto-downgraded" tag.
+func (m *Manager) fixDowngrade(req *domain.StoreRequest) {
+	req.Type = domain.MemoryTypeShortTerm
+	for _, t := range req.Tags {
+		if t == "auto-downgraded" {
+			return
+		}
+	}
+	req.Tags = append(req.Tags, "auto-downgraded")
+}
+
+// applyQualityFixes applies fixes in order compact→summarize→downgrade based on the verdict.
+// Returns a non-nil *StoreResult for VerdictMerge and VerdictReject (early exit).
+// Returns nil for VerdictAccept, VerdictFix, VerdictDowngrade (pipeline continues).
+func (m *Manager) applyQualityFixes(req *domain.StoreRequest, verdict QualityVerdict) (*domain.StoreResult, error) {
+	switch verdict.Action {
+	case VerdictReject:
+		reason := ""
+		if len(verdict.Issues) > 0 {
+			reason = verdict.Issues[0].Reason
+		}
+		m.logger.Info("quality gate reject",
+			"project", req.ProjectID,
+			"reason", reason,
+			"score", verdict.Score,
+			"preview", truncateStr(req.Content, 80),
+		)
+		return &domain.StoreResult{
+			Memory:      nil,
+			Created:     false,
+			QualityNote: "Memory too brief to be useful in future sessions",
+		}, nil
+
+	case VerdictMerge:
+		// Near-duplicate: return existing memory reference without writing to DB
+		existingID := ""
+		if issue := verdict.GetIssue(IssueNearDuplicate); issue != nil {
+			if id, ok := issue.Metadata["similar_memory_id"].(string); ok {
+				existingID = id
+			}
+		}
+		m.logger.Info("quality gate merge",
+			"project", req.ProjectID,
+			"existing_id", existingID,
+			"score", verdict.Score,
+		)
+		result := &domain.StoreResult{Created: false}
+		if existingID != "" {
+			result.Memory = &domain.Memory{ID: existingID}
+			result.QualityNote = "Similar memory already exists (ID: " + existingID + ")"
+		} else {
+			result.QualityNote = "Similar memory already exists"
+		}
+		return result, nil
+
+	case VerdictFix, VerdictAccept:
+		// Apply fixes in order: compact → summarize → downgrade
+		for _, issue := range verdict.Issues {
+			switch issue.Fix {
+			case FixCompact:
+				m.fixCompact(req)
+			case FixSummarize:
+				m.fixSummarize(req)
+			case FixDowngrade:
+				m.fixDowngrade(req)
+			}
+		}
+		return nil, nil
+
+	case VerdictDowngrade:
+		m.fixDowngrade(req)
+		return nil, nil
+
+	default:
+		return nil, nil
+	}
+}
+
+// qualityNoteForVerdict returns a human-readable note for non-Accept verdicts.
+// Returns empty string for VerdictAccept (no note needed).
+func qualityNoteForVerdict(v QualityVerdict) string {
+	switch v.Action {
+	case VerdictFix:
+		return "Content optimized for retrieval efficiency"
+	case VerdictDowngrade:
+		return "Stored as short-term memory (will decay faster)"
+	case VerdictMerge:
+		if issue := v.GetIssue(IssueNearDuplicate); issue != nil {
+			if id, ok := issue.Metadata["similar_memory_id"].(string); ok {
+				return "Similar memory already exists (ID: " + id + ")"
+			}
+		}
+		return "Similar memory already exists"
+	case VerdictReject:
+		return "Memory too brief to be useful in future sessions"
+	default:
+		return ""
+	}
+}
+
+// truncateStr returns the first n bytes of s, or s if shorter.
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 // MergeContent merges new content into existing memory

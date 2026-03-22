@@ -71,6 +71,7 @@ func main() {
 		memStore, embedStore, embedProvider, mirror,
 		cfg.Dedup.FuzzyThreshold, cfg.Dedup.SemanticThreshold,
 		logger,
+		coremem.NewQualityGate(cfg.QualityGate),
 	)
 
 	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, logger)

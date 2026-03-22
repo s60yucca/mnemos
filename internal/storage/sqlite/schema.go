@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS memories (
     last_accessed_at INTEGER NOT NULL,
     access_count    INTEGER NOT NULL DEFAULT 0,
     relevance_score REAL NOT NULL DEFAULT 1.0,
+    quality_score   REAL NOT NULL DEFAULT 1.0,
     status          TEXT NOT NULL DEFAULT 'active',
     content_hash    TEXT NOT NULL UNIQUE
 );
@@ -141,8 +143,8 @@ type migration struct {
 var migrations = []migration{
 	// v1: baseline — tables already created by applySchema above, nothing extra needed.
 	{version: 1, sql: `SELECT 1`},
-	// Add future migrations here, e.g.:
-	// {version: 2, sql: `ALTER TABLE memories ADD COLUMN new_col TEXT NOT NULL DEFAULT ''`},
+	// v2: add quality_score column for memory quality gate observability.
+	{version: 2, sql: `ALTER TABLE memories ADD COLUMN quality_score REAL DEFAULT 1.0`},
 }
 
 // runMigrations applies any pending migrations using PRAGMA user_version as the version counter.
@@ -159,7 +161,13 @@ func runMigrations(db *sql.DB) error {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, m.sql); err != nil {
-			return fmt.Errorf("migration v%d: %w", m.version, err)
+			// "duplicate column name" means the column already exists (e.g. new DB
+			// created with the column in the base schema). Treat as a no-op.
+			if strings.Contains(err.Error(), "duplicate column name") {
+				// column already present — skip silently
+			} else {
+				return fmt.Errorf("migration v%d: %w", m.version, err)
+			}
 		}
 		// PRAGMA user_version cannot use ? placeholders — format directly (safe: integer only)
 		if _, err := db.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, m.version)); err != nil {

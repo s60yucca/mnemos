@@ -27,7 +27,7 @@ func newTestManager(t *testing.T) *memory.Manager {
 	mir := markdown.NewMirror(t.TempDir(), false)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	m := memory.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger)
+	m := memory.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger, nil)
 	t.Cleanup(func() {
 		m.Stop()
 		db.Close()
@@ -44,7 +44,7 @@ func newTestManagerNoEmbed(t *testing.T) *memory.Manager {
 	mir := markdown.NewMirror(t.TempDir(), false)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	m := memory.NewManager(store, nil, nil, mir, 0.85, 0.92, logger)
+	m := memory.NewManager(store, nil, nil, mir, 0.85, 0.92, logger, nil)
 	t.Cleanup(func() {
 		m.Stop()
 		db.Close()

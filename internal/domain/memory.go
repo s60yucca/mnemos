@@ -23,6 +23,7 @@ type Memory struct {
 	LastAccessedAt time.Time         `json:"last_accessed_at"`
 	AccessCount    int               `json:"access_count"`
 	RelevanceScore float64           `json:"relevance_score"`
+	QualityScore   float64           `json:"quality_score,omitempty"`
 	Status         MemoryStatus      `json:"status"`
 	ContentHash    string            `json:"content_hash"`
 }
@@ -100,8 +101,9 @@ type UpdateRequest struct {
 
 // StoreResult is the output of a Store operation
 type StoreResult struct {
-	Memory  *Memory `json:"memory"`
-	Created bool    `json:"created"`
+	Memory      *Memory `json:"memory"`
+	Created     bool    `json:"created"`
+	QualityNote string  `json:"quality_note,omitempty"`
 }
 
 // RelateRequest is the input for creating a relation
