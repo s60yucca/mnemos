@@ -448,6 +448,7 @@ Benchmarked on macOS (Apple M-series), SQLite WAL mode, embeddings disabled (noo
 | `search` hybrid (RRF) | 42 ms | 39 ms | FTS + noop vector |
 | `list` | 34 ms | 26 ms | sorted by created_at |
 | `maintain` (decay+GC) | 27 ms | 108 ms | full table scan |
+| context assembly (MMR, 20 candidates) | ~147 µs | — | in-process, token budget 2000 |
 | hook session-start | < 200 ms | — | cold start, InitLight |
 | hook prompt-submit | < 100 ms | — | cold start, InitLight |
 | hook session-end | < 100 ms | — | cold start, InitLight |
