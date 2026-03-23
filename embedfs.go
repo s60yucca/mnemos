@@ -6,6 +6,7 @@ package mnemos
 import "embed"
 
 // Templates holds all files under the templates/ directory.
+// The "all:" prefix is required to include dotfiles like .cursorrules.
 //
-//go:embed templates
+//go:embed all:templates
 var Templates embed.FS

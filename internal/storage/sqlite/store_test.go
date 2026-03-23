@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -156,7 +157,7 @@ func TestProp_CountMemoriesSinceCorrect(t *testing.T) {
 
 	// 3 old memories (before cutoff)
 	for i := 0; i < 3; i++ {
-		mem := newTestMemory("old memory")
+		mem := newTestMemory(fmt.Sprintf("old memory %d", i))
 		mem.ProjectID = projectID
 		mem.CreatedAt = past
 		mem.UpdatedAt = past
@@ -166,7 +167,7 @@ func TestProp_CountMemoriesSinceCorrect(t *testing.T) {
 
 	// 2 recent memories (after cutoff)
 	for i := 0; i < 2; i++ {
-		mem := newTestMemory("recent memory")
+		mem := newTestMemory(fmt.Sprintf("recent memory %d", i))
 		mem.ProjectID = projectID
 		mem.CreatedAt = recent
 		mem.UpdatedAt = recent
