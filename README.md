@@ -184,7 +184,7 @@ Each session gets its own state file at `.mnemos/sessions/session-<id>.json` (fa
 curl -fsSL https://raw.githubusercontent.com/mnemos-dev/mnemos/main/install.sh | bash
 
 # Homebrew
-brew install mnemos-dev/tap/mnemos
+brew install s60yucca/tap/mnemos
 
 # Build from source (requires Go 1.23+)
 git clone https://github.com/mnemos-dev/mnemos
