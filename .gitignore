@@ -2,7 +2,7 @@
 dist/
 .kiro/
 .mnemos/
-~/.mnemos/mirror/
+~/
 Dockerfile
 nextphase.md
 roadmap.md
