@@ -30,7 +30,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: zip
     files:
       - README.md
       - install.sh
@@ -46,7 +46,7 @@ release:
   draft: false
   prerelease: auto
 
-brews:
+homebrew_casks:
   - name: mnemos
     repository:
       owner: s60yucca
@@ -54,11 +54,12 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/s60yucca/mnemos
     description: Persistent memory engine for AI agents
-    license: MIT
-    install: |
-      bin.install "mnemos"
-    test: |
-      system "#{bin}/mnemos", "version"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mnemos"]
+          end
 
 changelog:
   sort: asc
