@@ -9,19 +9,6 @@ import (
 	"strings"
 )
 
-const defaultMnemosConfig = `# Mnemos configuration
-# See https://github.com/mnemos-dev/mnemos for documentation
-
-log_level: info
-embeddings:
-  enabled: false
-  provider: noop
-hook:
-  enabled: true
-  search_cooldown: 5m
-  session_start_max_tokens: 2000
-`
-
 // Writer handles writing setup files to the filesystem.
 type Writer struct {
 	projectDir string
@@ -69,24 +56,6 @@ func (w *Writer) WriteFile(targetPath, templateContent string) (bool, error) {
 // EnsureDir creates a directory if it doesn't exist.
 func (w *Writer) EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
-}
-
-// EnsureMnemosDir creates .mnemos/ and .mnemos/config.yaml with defaults if not present.
-func (w *Writer) EnsureMnemosDir() error {
-	mnemosDir := filepath.Join(w.projectDir, ".mnemos")
-	if err := w.EnsureDir(mnemosDir); err != nil {
-		return fmt.Errorf("create .mnemos dir: %w", err)
-	}
-
-	configPath := filepath.Join(mnemosDir, "config.yaml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if err := w.atomicWrite(configPath, defaultMnemosConfig); err != nil {
-			return fmt.Errorf("write .mnemos/config.yaml: %w", err)
-		}
-		w.written = append(w.written, configPath)
-	}
-
-	return nil
 }
 
 // Report prints the list of files created/updated to stdout.

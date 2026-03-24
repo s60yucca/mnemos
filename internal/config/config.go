@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -201,6 +202,24 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
+
+	// Expand ~ prefix in data_dir for cross-platform safety.
+	// Go does not expand shell tildes, so a config with "data_dir: ~/.mnemos"
+	// would create a literal "~" directory in the working directory.
+	if strings.HasPrefix(cfg.DataDir, "~/") || cfg.DataDir == "~" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfg.DataDir = filepath.Join(home, cfg.DataDir[1:])
+		}
+	}
+	// Also expand mirror base_dir
+	if strings.HasPrefix(cfg.Mirror.BaseDir, "~/") || cfg.Mirror.BaseDir == "~" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfg.Mirror.BaseDir = filepath.Join(home, cfg.Mirror.BaseDir[1:])
+		}
+	}
+
 	return cfg, nil
 }
 

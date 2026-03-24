@@ -163,25 +163,4 @@ func TestMergeMCPConfig_ExistingFile(t *testing.T) {
 	assert.Len(t, servers, 2)
 }
 
-// TestSetup_EnsureMnemosDir verifies that EnsureMnemosDir creates .mnemos/ and config.yaml.
-func TestSetup_EnsureMnemosDir(t *testing.T) {
-	dir := t.TempDir()
-	w := setup.NewWriter(dir, false, false)
 
-	err := w.EnsureMnemosDir()
-	require.NoError(t, err)
-
-	mnemosDir := filepath.Join(dir, ".mnemos")
-	info, err := os.Stat(mnemosDir)
-	require.NoError(t, err)
-	assert.True(t, info.IsDir(), ".mnemos should be a directory")
-
-	configPath := filepath.Join(mnemosDir, "config.yaml")
-	content, err := os.ReadFile(configPath)
-	require.NoError(t, err)
-	assert.NotEmpty(t, content, "config.yaml should not be empty")
-
-	// Calling again should not error (idempotent)
-	err = w.EnsureMnemosDir()
-	require.NoError(t, err)
-}

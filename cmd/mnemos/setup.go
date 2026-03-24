@@ -60,13 +60,6 @@ func runSetup(clientName string, force, global bool) error {
 
 	writer := setup.NewWriter(baseDir, global, force)
 
-	// Ensure .mnemos dir (only for local setup)
-	if !global {
-		if err := writer.EnsureMnemosDir(); err != nil {
-			return fmt.Errorf("ensure .mnemos dir: %w", err)
-		}
-	}
-
 	// Write template files
 	for _, fm := range clientCfg.Files {
 		content, err := setup.GetTemplate(fm.TemplatePath)

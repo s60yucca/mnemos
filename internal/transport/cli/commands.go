@@ -304,14 +304,17 @@ func newInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Initialize Mnemos data directory and config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			home, _ := os.UserHomeDir()
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve home dir: %w", err)
+			}
 			dataDir := filepath.Join(home, ".mnemos")
 			if err := os.MkdirAll(dataDir, 0755); err != nil {
 				return err
 			}
 			cfgPath := filepath.Join(dataDir, "config.yaml")
 			if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-				defaultCfg := `data_dir: ~/.mnemos
+				defaultCfg := fmt.Sprintf(`data_dir: %s
 log_level: info
 embeddings:
   enabled: false
@@ -320,7 +323,7 @@ mirror:
   enabled: true
 lifecycle:
   gc_retention_days: 30
-`
+`, dataDir)
 				os.WriteFile(cfgPath, []byte(defaultCfg), 0644) //nolint:errcheck
 			}
 			fmt.Printf("Initialized Mnemos at %s\n", dataDir)
