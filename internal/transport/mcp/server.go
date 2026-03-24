@@ -16,12 +16,12 @@ type Server struct {
 }
 
 // NewServer creates and configures the MCP server
-func NewServer(mnemos *core.Mnemos) *Server {
+func NewServer(mnemos *core.Mnemos, version string) *Server {
 	s := &Server{mnemos: mnemos}
 
 	s.mcpServer = server.NewMCPServer(
 		"mnemos",
-		"1.0.0",
+		version,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
 		server.WithPromptCapabilities(true),

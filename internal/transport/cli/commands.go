@@ -276,7 +276,7 @@ func newMaintainCmd(m *core.Mnemos) *cobra.Command {
 	}
 }
 
-func newServeCmd(m *core.Mnemos) *cobra.Command {
+func newServeCmd(m *core.Mnemos, version string) *cobra.Command {
 	var rest bool
 	var port int
 	cmd := &cobra.Command{
@@ -289,7 +289,7 @@ func newServeCmd(m *core.Mnemos) *cobra.Command {
 				return nil
 			}
 			// MCP stdio mode
-			mcpServer := mcptransport.NewServer(m)
+			mcpServer := mcptransport.NewServer(m, version)
 			return mcpServer.ServeStdio(context.Background())
 		},
 	}

@@ -37,7 +37,7 @@ func NewRootCmd(mnemos *core.Mnemos, version string) *cobra.Command {
 		newRelateCmd(mnemos),
 		newStatsCmd(mnemos),
 		newMaintainCmd(mnemos),
-		newServeCmd(mnemos),
+		newServeCmd(mnemos, version),
 		newInitCmd(),
 		newVersionCmd(version),
 	)

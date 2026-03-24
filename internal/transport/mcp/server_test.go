@@ -69,7 +69,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, *sqlitestore.EmbeddingS
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
 	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
 
-	server := NewServer(mn)
+	server := NewServer(mn, "test")
 
 	t.Cleanup(func() {
 		mn.Shutdown()
@@ -249,7 +249,7 @@ func newTestServerWithGate(t *testing.T) *Server {
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
 	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
 
-	server := NewServer(mn)
+	server := NewServer(mn, "test")
 
 	t.Cleanup(func() {
 		mn.Shutdown()
