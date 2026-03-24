@@ -51,6 +51,7 @@ brews:
     repository:
       owner: s60yucca
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/s60yucca/mnemos
     description: Persistent memory engine for AI agents
     license: MIT
