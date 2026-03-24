@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	core "github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/setup"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	mcptransport "github.com/mnemos-dev/mnemos/internal/transport/mcp"
 	"github.com/spf13/cobra"
@@ -300,89 +299,26 @@ func newServeCmd(m *core.Mnemos) *cobra.Command {
 }
 
 func newInitCmd() *cobra.Command {
-	var local bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "init",
 		Short: "Initialize Mnemos data directory and config",
-		Long: `Create the Mnemos config directory and default config.yaml.
+		Long: `Create ~/.mnemos/ with default config.yaml and data directory.
 
-By default, initializes the global config at ~/.mnemos/config.yaml.
-Use --local to create a project-local config at .mnemos/config.yaml
-(takes precedence over the global config).`,
+The global config is shared by all AI clients (Kiro, Claude, Cursor).
+Per-project overrides are available via MNEMOS_* environment variables.
+
+Examples:
+  mnemos init
+  MNEMOS_EMBEDDINGS_PROVIDER=ollama mnemos serve`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if local {
-				return initLocal()
+			dataDir, err := setup.EnsureGlobalConfig()
+			if err != nil {
+				return err
 			}
-			return initGlobal()
+			fmt.Printf("Initialized Mnemos at %s\n", dataDir)
+			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&local, "local", false, "create project-local .mnemos/config.yaml instead of global")
-	return cmd
-}
-
-func initGlobal() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("resolve home dir: %w", err)
-	}
-	dataDir := filepath.Join(home, ".mnemos")
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return err
-	}
-	cfgPath := filepath.Join(dataDir, "config.yaml")
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		defaultCfg := fmt.Sprintf(`data_dir: %s
-log_level: info
-embeddings:
-  enabled: false
-  provider: noop
-mirror:
-  enabled: true
-lifecycle:
-  gc_retention_days: 30
-`, dataDir)
-		if err := os.WriteFile(cfgPath, []byte(defaultCfg), 0644); err != nil {
-			return fmt.Errorf("write config: %w", err)
-		}
-	}
-	fmt.Printf("Initialized Mnemos at %s\n", dataDir)
-	return nil
-}
-
-func initLocal() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("resolve working dir: %w", err)
-	}
-	mnemosDir := filepath.Join(cwd, ".mnemos")
-	if err := os.MkdirAll(mnemosDir, 0755); err != nil {
-		return err
-	}
-	cfgPath := filepath.Join(mnemosDir, "config.yaml")
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		defaultCfg := `# Mnemos project-local configuration
-# This file takes precedence over ~/.mnemos/config.yaml
-# See https://github.com/mnemos-dev/mnemos for documentation
-
-log_level: info
-embeddings:
-  enabled: false
-  provider: noop
-  # provider: ollama
-  # base_url: http://localhost:11434
-  # model: nomic-embed-text
-  # dims: 768
-hook:
-  enabled: true
-  search_cooldown: 5m
-  session_start_max_tokens: 2000
-`
-		if err := os.WriteFile(cfgPath, []byte(defaultCfg), 0644); err != nil {
-			return fmt.Errorf("write config: %w", err)
-		}
-	}
-	fmt.Printf("Initialized project-local config at %s\n", cfgPath)
-	return nil
 }
 
 func newVersionCmd(version string) *cobra.Command {

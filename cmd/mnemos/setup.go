@@ -52,6 +52,11 @@ func runSetup(clientName string, force, global bool) error {
 		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor", clientName)
 	}
 
+	// Ensure global config exists (idempotent)
+	if _, err := setup.EnsureGlobalConfig(); err != nil {
+		return fmt.Errorf("ensure global config: %w", err)
+	}
+
 	// Resolve base directory
 	baseDir, err := resolveBaseDir(global)
 	if err != nil {

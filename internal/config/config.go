@@ -191,8 +191,6 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		// Project-local takes precedence
-		v.AddConfigPath(".mnemos")
 		home, _ := os.UserHomeDir()
 		v.AddConfigPath(filepath.Join(home, ".mnemos"))
 	}

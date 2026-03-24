@@ -113,3 +113,51 @@ func (w *Writer) atomicWrite(targetPath, content string) error {
 	success = true
 	return nil
 }
+
+// EnsureGlobalConfig creates ~/.mnemos/ and a default config.yaml if not present.
+// Returns the data directory path. Safe to call multiple times (idempotent).
+func EnsureGlobalConfig() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	dataDir := filepath.Join(home, ".mnemos")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return "", fmt.Errorf("create data dir: %w", err)
+	}
+	cfgPath := filepath.Join(dataDir, "config.yaml")
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		defaultCfg := fmt.Sprintf(`# Mnemos configuration — shared by all AI clients
+# See https://github.com/mnemos-dev/mnemos for documentation
+# Per-project overrides: use MNEMOS_* environment variables
+
+data_dir: %s
+log_level: info
+
+embeddings:
+  enabled: false
+  provider: noop
+  # Uncomment for semantic search:
+  # provider: ollama
+  # base_url: http://localhost:11434
+  # model: nomic-embed-text
+  # dims: 768
+
+hook:
+  enabled: true
+  search_cooldown: 5m
+  session_start_max_tokens: 2000
+
+mirror:
+  enabled: true
+
+lifecycle:
+  gc_retention_days: 30
+`, dataDir)
+		if err := os.WriteFile(cfgPath, []byte(defaultCfg), 0o644); err != nil {
+			return "", fmt.Errorf("write config: %w", err)
+		}
+		fmt.Printf("Created config: %s\n", cfgPath)
+	}
+	return dataDir, nil
+}

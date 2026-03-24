@@ -28,6 +28,15 @@ func NewStateManager(projectDir string, cfg *config.HookConfig) *StateManager {
 	}
 }
 
+// NewStateManagerWithDir creates a StateManager with an explicit directory.
+// Used for testing to avoid writing to ~/.mnemos/.
+func NewStateManagerWithDir(dir string, cfg *config.HookConfig) *StateManager {
+	return &StateManager{
+		dir: dir,
+		cfg: cfg,
+	}
+}
+
 func (sm *StateManager) filePath(sessionID string) string {
 	return filepath.Join(sm.dir, fmt.Sprintf("session-%s.json", sessionID))
 }

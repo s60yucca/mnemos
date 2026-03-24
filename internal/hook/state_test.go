@@ -10,33 +10,13 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/hook"
 )
 
-func TestSessionState_PathResolution_WithMnemosDir(t *testing.T) {
-	projectDir := t.TempDir()
-
-	// Create .mnemos/ directory inside projectDir
-	mnemosDir := filepath.Join(projectDir, ".mnemos")
-	if err := os.Mkdir(mnemosDir, 0o755); err != nil {
-		t.Fatalf("failed to create .mnemos dir: %v", err)
-	}
-
-	got := hook.ResolveSessionDir(projectDir, "sessions")
-	want := filepath.Join(mnemosDir, "sessions")
-
-	if got != want {
-		t.Errorf("ResolveSessionDir = %q, want %q", got, want)
-	}
-}
-
-func TestSessionState_PathResolution_Fallback(t *testing.T) {
-	projectDir := t.TempDir()
-	// No .mnemos/ directory created — should fall back to ~/.mnemos/sessions
-
+func TestSessionState_PathResolution(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Skip("cannot determine home dir")
 	}
 
-	got := hook.ResolveSessionDir(projectDir, "sessions")
+	got := hook.ResolveSessionDir("", "sessions")
 	want := filepath.Join(home, ".mnemos", "sessions")
 
 	if got != want {
@@ -46,18 +26,12 @@ func TestSessionState_PathResolution_Fallback(t *testing.T) {
 
 func newTestStateManager(t *testing.T) *hook.StateManager {
 	t.Helper()
-	dir := t.TempDir()
-
-	// Create .mnemos inside the temp dir so ResolveSessionDir uses it
-	mnemosDir := filepath.Join(dir, ".mnemos")
-	if err := os.Mkdir(mnemosDir, 0o755); err != nil {
-		t.Fatalf("failed to create .mnemos dir: %v", err)
-	}
+	dir := filepath.Join(t.TempDir(), "sessions")
 
 	cfg := &config.HookConfig{
 		SessionDir: "sessions",
 	}
-	return hook.NewStateManager(dir, cfg)
+	return hook.NewStateManagerWithDir(dir, cfg)
 }
 
 func TestStateManager_SaveAndGet(t *testing.T) {

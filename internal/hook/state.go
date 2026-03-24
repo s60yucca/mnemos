@@ -28,18 +28,10 @@ type SearchEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// ResolveSessionDir returns the path to the sessions directory.
-// If .mnemos/ exists in projectDir, returns projectDir/.mnemos/<sessionDir>.
-// Otherwise returns ~/.mnemos/<sessionDir>.
+// ResolveSessionDir returns the path to the sessions directory under ~/.mnemos/.
 func ResolveSessionDir(projectDir string, sessionDir string) string {
-	mnemosDir := filepath.Join(projectDir, ".mnemos")
-	if info, err := os.Stat(mnemosDir); err == nil && info.IsDir() {
-		return filepath.Join(mnemosDir, sessionDir)
-	}
-
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// fallback to relative path if home dir is unavailable
 		return filepath.Join(".mnemos", sessionDir)
 	}
 	return filepath.Join(home, ".mnemos", sessionDir)

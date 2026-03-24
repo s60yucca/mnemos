@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -57,13 +56,8 @@ func TestSessionEnd_NoState(t *testing.T) {
 }
 
 // TestPromptSubmit_CreatesStateIfMissing: prompt-submit with a specific prompt
-// and no existing session state should create a state file and return "ok" or "skipped"
-// (not "error").
+// and no existing session state should return "ok" or "skipped" (not "error").
 func TestPromptSubmit_CreatesStateIfMissing(t *testing.T) {
-	projectDir := t.TempDir()
-	mnemosDir := filepath.Join(projectDir, ".mnemos")
-	require.NoError(t, os.Mkdir(mnemosDir, 0o755))
-
 	d := newTestDispatcher(t)
 
 	payload, err := json.Marshal(map[string]string{
@@ -72,10 +66,9 @@ func TestPromptSubmit_CreatesStateIfMissing(t *testing.T) {
 	require.NoError(t, err)
 
 	inputMap := map[string]any{
-		"hook":        "prompt-submit",
-		"session_id":  "test-session-prompt-create",
-		"project_dir": projectDir,
-		"payload":     json.RawMessage(payload),
+		"hook":       "prompt-submit",
+		"session_id": "test-session-prompt-create",
+		"payload":    json.RawMessage(payload),
 	}
 	inputJSON, err := json.Marshal(inputMap)
 	require.NoError(t, err)
@@ -83,10 +76,4 @@ func TestPromptSubmit_CreatesStateIfMissing(t *testing.T) {
 	out := dispatch(t, d, string(inputJSON))
 
 	assert.NotEqual(t, "error", out.Status, "expected ok or skipped, got error: %s", out.Message)
-
-	// Verify a state file was created under projectDir/.mnemos/sessions/
-	sessionsDir := filepath.Join(mnemosDir, "sessions")
-	entries, err := os.ReadDir(sessionsDir)
-	require.NoError(t, err, "sessions directory should exist")
-	assert.NotEmpty(t, entries, "at least one session state file should have been created")
 }
