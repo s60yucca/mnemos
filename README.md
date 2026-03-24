@@ -119,7 +119,7 @@ mnemos setup claude --force
 | File | Purpose |
 |------|---------|
 | `.kiro/steering/mnemos.md` | Steering file — auto-loaded by Kiro on every session |
-| `.kiro/mcp.json` | MCP server config |
+| `.kiro/settings/mcp.json` | MCP server config |
 
 **Cursor** (`mnemos setup cursor`):
 
@@ -241,7 +241,7 @@ Then add a session instruction based on [templates/claude/CLAUDE.md](./templates
 mnemos setup kiro
 ```
 
-This writes `.kiro/steering/mnemos.md` and `.kiro/mcp.json`. Kiro picks up the steering file automatically on every session.
+This writes `.kiro/steering/mnemos.md` and `.kiro/settings/mcp.json`. Kiro picks up the steering file automatically on every session.
 
 **Manual setup:**
 

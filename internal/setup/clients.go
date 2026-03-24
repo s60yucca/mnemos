@@ -51,8 +51,8 @@ var Clients = map[string]ClientConfig{
 			},
 		},
 		MCPConfig: MCPMapping{
-			LocalPath:  ".kiro/mcp.json",
-			GlobalPath: ".kiro/mcp.json",
+			LocalPath:  ".kiro/settings/mcp.json",
+			GlobalPath: ".kiro/settings/mcp.json",
 		},
 	},
 	"cursor": {
