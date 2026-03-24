@@ -60,7 +60,8 @@ func main() {
 	case "openai":
 		embedProvider = embedding.NewOpenAIProvider(cfg.Embeddings.APIKey, cfg.Embeddings.Model, cfg.Embeddings.Dims)
 	default:
-		embedProvider = embedding.NewNoopProvider(cfg.Embeddings.Dims)
+		// noop: leave embedProvider nil so SearchEngine skips the semantic path entirely.
+		// Memories are still stored without embeddings; FTS handles all search.
 	}
 
 	// Markdown mirror

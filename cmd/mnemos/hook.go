@@ -93,8 +93,17 @@ func buildLightMnemos(cfg *config.Config) (*core.Mnemos, func(), error) {
 	embedStore := sqlitestore.NewEmbeddingStore(db)
 	relStore := sqlitestore.NewRelationStore(db)
 
-	// Noop provider for InitLight — no health-check, no network calls
-	embedProvider := embedding.NewNoopProvider(cfg.Embeddings.Dims)
+	// Use the configured embedding provider for search, but skip health-check
+	// (InitLight mode). Noop → nil so SearchEngine skips semantic path entirely.
+	var embedProvider embedding.IEmbeddingProvider
+	switch cfg.Embeddings.Provider {
+	case "ollama":
+		embedProvider = embedding.NewOllamaProvider(cfg.Embeddings.BaseURL, cfg.Embeddings.Model, cfg.Embeddings.Dims)
+	case "openai":
+		embedProvider = embedding.NewOpenAIProvider(cfg.Embeddings.APIKey, cfg.Embeddings.Model, cfg.Embeddings.Dims)
+	default:
+		// noop: leave nil
+	}
 
 	mirror := markdown.NewMirror(cfg.Mirror.BaseDir, false) // mirror disabled for hooks
 

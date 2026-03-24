@@ -52,7 +52,7 @@ func (e *SearchEngine) TextSearch(ctx context.Context, q storage.TextSearchQuery
 // SemanticSearch embeds the query and performs vector similarity search
 func (e *SearchEngine) SemanticSearch(ctx context.Context, query string, projectID string, limit int, minSim float64) ([]*storage.SearchResult, error) {
 	if e.embedder == nil || e.embedStore == nil {
-		return nil, nil
+		return []*storage.SearchResult{}, nil
 	}
 	vec, err := e.embedder.Embed(ctx, query)
 	if err != nil {
