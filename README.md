@@ -111,7 +111,7 @@ mnemos setup claude --force
 | File | Purpose |
 |------|---------|
 | `CLAUDE.md` | Steering instructions — tells Claude when and what to store |
-| `.claude/hooks.json` | Hook config — wires session-start, prompt-submit, session-end |
+| `.claude/settings.json` | Hook config — wires SessionStart, UserPromptSubmit, SessionEnd |
 | `.mcp.json` | MCP server config — registers `mnemos serve` |
 
 **Kiro** (`mnemos setup kiro`):
@@ -209,7 +209,7 @@ mnemos init
 mnemos setup claude
 ```
 
-This writes `CLAUDE.md`, `.claude/hooks.json`, and `.mcp.json` in one shot. Restart Claude Code and memory is fully automatic.
+This writes `CLAUDE.md`, `.claude/settings.json`, and `.mcp.json` in one shot. Restart Claude Code and memory is fully automatic.
 
 **Manual setup:**
 

@@ -77,3 +77,28 @@ func TestPromptSubmit_CreatesStateIfMissing(t *testing.T) {
 
 	assert.NotEqual(t, "error", out.Status, "expected ok or skipped, got error: %s", out.Message)
 }
+
+func TestDispatcher_ClaudeUserPromptSubmitShape(t *testing.T) {
+	projectDir := t.TempDir()
+	mnemosDir := filepath.Join(projectDir, ".mnemos")
+	require.NoError(t, os.Mkdir(mnemosDir, 0o755))
+
+	d := newTestDispatcher(t)
+
+	inputJSON, err := json.Marshal(map[string]any{
+		"hook_event_name": "UserPromptSubmit",
+		"session_id":      "claude-session-1",
+		"cwd":             projectDir,
+		"prompt":          "implement authentication with JWT tokens",
+	})
+	require.NoError(t, err)
+
+	out := dispatch(t, d, string(inputJSON))
+
+	assert.NotEqual(t, "error", out.Status, "expected ok or skipped, got error: %s", out.Message)
+
+	sessionsDir := filepath.Join(mnemosDir, "sessions")
+	entries, err := os.ReadDir(sessionsDir)
+	require.NoError(t, err, "sessions directory should exist")
+	assert.NotEmpty(t, entries, "claude-shaped input should create session state")
+}

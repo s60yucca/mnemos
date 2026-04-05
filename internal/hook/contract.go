@@ -12,20 +12,32 @@ import (
 
 // HookInput is the JSON received from AI client via stdin.
 type HookInput struct {
-	Hook       string          `json:"hook"`
-	SessionID  string          `json:"session_id,omitempty"`
-	ProjectDir string          `json:"project_dir,omitempty"`
-	ProjectID  string          `json:"project_id,omitempty"`
-	Timestamp  *time.Time      `json:"timestamp,omitempty"`
-	Payload    json.RawMessage `json:"payload,omitempty"`
+	Hook          string          `json:"hook,omitempty"`
+	HookEventName string          `json:"hook_event_name,omitempty"`
+	SessionID     string          `json:"session_id,omitempty"`
+	ProjectDir    string          `json:"project_dir,omitempty"`
+	ProjectID     string          `json:"project_id,omitempty"`
+	Cwd           string          `json:"cwd,omitempty"`
+	Prompt        string          `json:"prompt,omitempty"`
+	Source        string          `json:"source,omitempty"`
+	Reason        string          `json:"reason,omitempty"`
+	Timestamp     *time.Time      `json:"timestamp,omitempty"`
+	Payload       json.RawMessage `json:"payload,omitempty"`
 }
 
 // HookOutput is the JSON returned to AI client via stdout.
 type HookOutput struct {
-	ContextInjection string         `json:"context_injection,omitempty"`
-	Status           string         `json:"status"` // "ok" | "skipped" | "error"
-	Message          string         `json:"message,omitempty"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
+	ContextInjection   string              `json:"context_injection,omitempty"`
+	Status             string              `json:"status"` // "ok" | "skipped" | "error"
+	Message            string              `json:"message,omitempty"`
+	Metadata           map[string]any      `json:"metadata,omitempty"`
+	HookSpecificOutput *HookSpecificOutput `json:"hookSpecificOutput,omitempty"`
+}
+
+// HookSpecificOutput is the Claude Code-specific structured output block.
+type HookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext,omitempty"`
 }
 
 // SessionStartPayload is the payload for the session-start hook.
@@ -50,7 +62,7 @@ func resolveSessionID(input *HookInput) string {
 	if input.SessionID != "" {
 		return input.SessionID
 	}
-	raw := input.ProjectDir + strconv.Itoa(os.Getpid()) + time.Now().String()
+	raw := resolveProjectDir(input) + strconv.Itoa(os.Getpid()) + time.Now().String()
 	sum := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", sum)
 }
@@ -61,8 +73,35 @@ func resolveProjectID(input *HookInput) string {
 	if input.ProjectID != "" {
 		return input.ProjectID
 	}
-	if input.ProjectDir != "" {
-		return filepath.Base(input.ProjectDir)
+	if projectDir := resolveProjectDir(input); projectDir != "" {
+		return filepath.Base(projectDir)
 	}
 	return "unknown"
+}
+
+func resolveProjectDir(input *HookInput) string {
+	if input.ProjectDir != "" {
+		return input.ProjectDir
+	}
+	if input.Cwd != "" {
+		return input.Cwd
+	}
+	return ""
+}
+
+func normalizeHookName(input *HookInput) string {
+	if input.Hook != "" {
+		return input.Hook
+	}
+
+	switch input.HookEventName {
+	case "SessionStart":
+		return "session-start"
+	case "UserPromptSubmit":
+		return "prompt-submit"
+	case "SessionEnd":
+		return "session-end"
+	default:
+		return ""
+	}
 }

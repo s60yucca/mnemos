@@ -8,5 +8,5 @@ import "embed"
 // Templates holds all files under the templates/ directory.
 // The "all:" prefix is required to include dotfiles like .cursorrules.
 //
-//go:embed all:templates
+//go:embed templates templates/cursor/.cursorrules
 var Templates embed.FS

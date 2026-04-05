@@ -19,13 +19,16 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	}
 	promptText := payload.PromptText
 	if promptText == "" {
+		promptText = input.Prompt
+	}
+	if promptText == "" {
 		return &HookOutput{Status: "skipped", Message: "empty prompt"}, nil
 	}
 	if IsGenericPrompt(promptText) {
 		return &HookOutput{Status: "skipped", Message: "generic prompt"}, nil
 	}
 	sessionID := resolveSessionID(input)
-	stateManager := NewStateManager(input.ProjectDir, d.cfg)
+	stateManager := NewStateManager(resolveProjectDir(input), d.cfg)
 	state := stateManager.Get(sessionID)
 	if state == nil {
 		state = &SessionState{
@@ -68,10 +71,12 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	if len(results) == 0 {
 		return &HookOutput{Status: "ok", Message: "searched, no results"}, nil
 	}
+	context := formatSearchResults(results)
 	return &HookOutput{
-		ContextInjection: formatSearchResults(results),
-		Status:           "ok",
-		Metadata:         map[string]any{"memories_found": len(results)},
+		ContextInjection:   context,
+		Status:             "ok",
+		Metadata:           map[string]any{"memories_found": len(results)},
+		HookSpecificOutput: additionalContextOutput("UserPromptSubmit", context),
 	}, nil
 }
 
@@ -118,4 +123,14 @@ func formatSearchResults(results []*storage.SearchResult) string {
 		}
 	}
 	return strings.TrimRight(sb.String(), "\n") + "\n"
+}
+
+func additionalContextOutput(eventName, context string) *HookSpecificOutput {
+	if strings.TrimSpace(context) == "" {
+		return nil
+	}
+	return &HookSpecificOutput{
+		HookEventName:     eventName,
+		AdditionalContext: context,
+	}
 }

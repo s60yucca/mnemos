@@ -48,6 +48,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, r io.Reader, w io.Writer) {
 		return
 	}
 
+	input.Hook = normalizeHookName(&input)
+
 	if !d.cfg.Enabled {
 		d.writeOutput(w, &HookOutput{
 			Status:  "skipped",

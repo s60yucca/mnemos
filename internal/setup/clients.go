@@ -31,9 +31,9 @@ var Clients = map[string]ClientConfig{
 				GlobalPath:   "CLAUDE.md",
 			},
 			{
-				TemplatePath: "templates/claude/hooks.json",
-				LocalPath:    ".claude/hooks.json",
-				GlobalPath:   ".claude/hooks.json",
+				TemplatePath: "templates/claude/settings.json",
+				LocalPath:    ".claude/settings.json",
+				GlobalPath:   ".claude/settings.json",
 			},
 		},
 		MCPConfig: MCPMapping{

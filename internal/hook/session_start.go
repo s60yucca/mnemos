@@ -31,6 +31,10 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 		query = payload.InitialPrompt
 	} else if payload.WorkingDir != "" {
 		query = filepath.Base(payload.WorkingDir)
+	} else if projectDir := resolveProjectDir(input); projectDir != "" {
+		// Claude Code's SessionStart payload provides cwd but no initial task prompt.
+		// Fall back to project/repo identity so we can still load broad context.
+		query = filepath.Base(projectDir)
 	}
 	if query == "" {
 		return &HookOutput{
@@ -40,7 +44,7 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	}
 
 	// 4. CLEAN STALE SESSIONS
-	stateManager := NewStateManager(input.ProjectDir, d.cfg)
+	stateManager := NewStateManager(resolveProjectDir(input), d.cfg)
 	_ = stateManager.CleanStale()
 
 	// 5. UPSERT SESSION STATE
@@ -78,6 +82,7 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 			"memories_found": len(result.Memories),
 			"tokens_used":    result.TotalTokens,
 		},
+		HookSpecificOutput: additionalContextOutput("SessionStart", formatContextResult(result)),
 	}, nil
 }
 

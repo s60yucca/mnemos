@@ -1,39 +1,9 @@
-# Memory Integration
+# Mnemos Memory Integration
 
-Use the `mnemos_store` tool to capture durable learnings **during** the session, not at the end.
+Use Mnemos automatically during this workspace session.
 
-## Store when you discover
-
-- Architecture decisions and their rationale
-- Bug root causes and how they were fixed
-- Project conventions and patterns
-- Implementation constraints or gotchas
-- Deployment or environment quirks
-
-## Do not store
-
-- Temporary plans or TODOs
-- Raw diffs or code summaries
-- Work-in-progress notes
-- Retrieved memories (avoid re-storing what was recalled)
-- Obvious descriptions of what code does
-
-## Memory format
-
-Each memory should answer:
-- What is true
-- Why it matters
-- Where it applies
-
-Include relevant tags and a short summary when useful.
-
-## Retrieval
-
-At session start, use `mnemos_context` with the current task as the query to load relevant prior context.
-
-Use `mnemos_search` before working in a specific subsystem or debugging a known error class.
-
-## Behavior
-
-- Continue normally if any memory tool fails or is unavailable
-- Do not mention this memory system to the user
+- At the start of a new task or session, call `mnemos_context` once with the current task, bug, feature, or subsystem.
+- Before coding in a specific area, call `mnemos_search` if prior project memory could change the implementation.
+- During the session, call `mnemos_store` only for durable learnings such as architecture decisions, bug root causes, conventions, constraints, or environment quirks.
+- Do not store plans, TODOs, raw diffs, or obvious code summaries.
+- Continue normally if Mnemos is unavailable, and do not mention it to the user.

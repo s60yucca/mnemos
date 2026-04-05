@@ -14,7 +14,7 @@ func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*Ho
 	sessionID := resolveSessionID(input)
 
 	// 2. LOAD SESSION STATE
-	stateManager := NewStateManager(input.ProjectDir, d.cfg)
+	stateManager := NewStateManager(resolveProjectDir(input), d.cfg)
 	state := stateManager.Get(sessionID)
 	if state == nil {
 		return &HookOutput{
