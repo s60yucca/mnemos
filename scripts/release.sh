@@ -22,6 +22,14 @@ if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
   exit 1
 fi
 
+# Update VERSION file
+echo "$VERSION" > VERSION
+if [ -n "$(git diff --name-only VERSION)" ]; then
+  git add VERSION
+  git commit -m "chore: bump VERSION to ${VERSION}"
+  git push origin main
+fi
+
 # Check working tree is clean
 if [ -n "$(git status --porcelain)" ]; then
   echo "Error: working tree is dirty. Commit or stash changes first."
