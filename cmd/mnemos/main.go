@@ -1,9 +1,11 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/config"
@@ -20,6 +22,19 @@ import (
 )
 
 var version = "dev"
+
+//go:embed version.txt
+var embeddedVersion string
+
+func resolveVersion() string {
+	if version != "dev" {
+		return version // ldflags override takes priority
+	}
+	if v := strings.TrimSpace(embeddedVersion); v != "" {
+		return v
+	}
+	return "dev"
+}
 
 func main() {
 	// Load config
@@ -96,7 +111,7 @@ func main() {
 	defer mnemos.Shutdown()
 
 	// CLI
-	rootCmd := cli.NewRootCmd(mnemos, version)
+	rootCmd := cli.NewRootCmd(mnemos, resolveVersion())
 	rootCmd.AddCommand(newHookCmd(cfg))
 	rootCmd.AddCommand(newSetupCmd())
 	if err := rootCmd.Execute(); err != nil {
