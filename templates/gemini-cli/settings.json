@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mnemos": {
+      "command": "mnemos",
+      "args": ["serve"]
+    }
+  }
+}

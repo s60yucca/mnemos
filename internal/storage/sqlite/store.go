@@ -296,6 +296,59 @@ func (s *SQLiteStore) CountMemoriesSince(ctx context.Context, projectID string, 
 	return count, err
 }
 
+// --- Phase 1 Primitives ---
+
+func (s *SQLiteStore) GetRecentMemories(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT * FROM memories WHERE status='active' AND project_id=? ORDER BY created_at DESC LIMIT ?`,
+		projectID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMemories(rows)
+}
+
+func (s *SQLiteStore) GetLastSessionSummary(ctx context.Context, projectID string) (*domain.Memory, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT * FROM memories WHERE status='active' AND project_id=? AND (category='session' OR tags LIKE '%auto-breadcrumb%') ORDER BY created_at DESC LIMIT 1`,
+		projectID,
+	)
+	m, err := scanMemory(row)
+	if err == sql.ErrNoRows {
+		return nil, nil // Return nil, nil per spec
+	}
+	return m, err
+}
+
+func (s *SQLiteStore) GetCompiledArticles(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT * FROM memories WHERE status='active' AND project_id=? AND type='compiled' ORDER BY relevance_score DESC LIMIT ?`,
+		projectID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMemories(rows)
+}
+
+func (s *SQLiteStore) ReduceRelevance(ctx context.Context, id string, delta float64, minScore float64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE memories SET relevance_score = MAX(relevance_score - ?, ?), updated_at = ? WHERE id = ?`,
+		delta, minScore, util.TimeToUnixNano(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return &domain.NotFoundError{ID: id}
+	}
+	return nil
+}
+
 func (s *SQLiteStore) Close() error                   { return s.db.Close() }
 func (s *SQLiteStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 

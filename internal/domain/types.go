@@ -8,11 +8,13 @@ const (
 	MemoryTypeLongTerm  MemoryType = "long_term"
 	MemoryTypeEpisodic  MemoryType = "episodic"
 	MemoryTypeSemantic  MemoryType = "semantic"
+	MemoryTypeSkill     MemoryType = "skill"
+	MemoryTypeCompiled  MemoryType = "compiled"
 )
 
 func (t MemoryType) IsValid() bool {
 	switch t {
-	case MemoryTypeShortTerm, MemoryTypeLongTerm, MemoryTypeEpisodic, MemoryTypeSemantic:
+	case MemoryTypeShortTerm, MemoryTypeLongTerm, MemoryTypeEpisodic, MemoryTypeSemantic, MemoryTypeSkill, MemoryTypeCompiled:
 		return true
 	}
 	return false
@@ -31,6 +33,10 @@ func (t MemoryType) DefaultDecayRate() float64 {
 		return 0.02
 	case MemoryTypeSemantic:
 		return 0.001
+	case MemoryTypeSkill:
+		return 0.010
+	case MemoryTypeCompiled:
+		return 0.005
 	default:
 		return 0.02
 	}
@@ -67,13 +73,14 @@ const (
 	RelationTypePartOf      RelationType = "part_of"
 	RelationTypeCausedBy    RelationType = "caused_by"
 	RelationTypeReferences  RelationType = "references" // alias for relates_to
+	RelationTypeCompiledFrom RelationType = "compiled_from"
 )
 
 func (r RelationType) IsValid() bool {
 	switch r {
 	case RelationTypeRelatesTo, RelationTypeDependsOn, RelationTypeContradicts,
 		RelationTypeSupersedes, RelationTypeDerivedFrom, RelationTypePartOf, RelationTypeCausedBy,
-		RelationTypeReferences:
+		RelationTypeReferences, RelationTypeCompiledFrom:
 		return true
 	}
 	return false

@@ -12,6 +12,7 @@ type SessionState struct {
 	ProjectID       string        `json:"project_id"`
 	StartedAt       time.Time     `json:"started_at"`
 	LastActivity    time.Time     `json:"last_activity"`
+	LastNudgeAt     time.Time     `json:"last_nudge_at,omitempty"`
 	PID             int           `json:"pid"`
 	InitialQuery    string        `json:"initial_query,omitempty"`
 	ActiveTopic     string        `json:"active_topic,omitempty"`

@@ -1,0 +1,6 @@
+# 2026/04/11 14:21:49.454300 [TestProp_IsGenericPrompt/specific_prompts_return_false] [rapid] draw specific_prompt: "optimize query performance"
+# 2026/04/11 14:21:49.454309 [TestProp_IsGenericPrompt/specific_prompts_return_false] IsGenericPrompt("optimize query performance") = true, want false
+# 
+v0.4.8#9688183265442484000
+0x6b74f03291620
+0x5

@@ -4,6 +4,15 @@ Use Mnemos automatically during this workspace session.
 
 - At the start of a new task or session, call `mnemos_context` once with the current task, bug, feature, or subsystem.
 - Before coding in a specific area, call `mnemos_search` if prior project memory could change the implementation.
-- During the session, call `mnemos_store` only for durable learnings such as architecture decisions, bug root causes, conventions, constraints, or environment quirks.
-- Do not store plans, TODOs, raw diffs, or obvious code summaries.
+- During the session, call `mnemos_store` or `mnemos_compile` when you discover durable learnings:
+
+| Situation | Type | Example |
+|-----------|------|---------|
+| Bug fixed — root cause identified | `semantic` | "JWT refresh failed due to clock skew" |
+| Task completed — what happened | `episodic` | "Migrated auth to RS256 — took 3h, tested locally" |
+| Non-obvious command succeeded | **`skill`** | "Build AAR: `./gradlew :sdk:assembleRelease --no-daemon`" |
+| Architecture/design decision | `semantic` | "Using SQLite WAL for concurrency instead of Postgres" |
+| Manual compilation of topic notes | **`compiled`** | Use `mnemos_compile` to distill knowledge. |
+
+- Do not store plans, TODOs, raw diffs, obvious code summaries, or simple routine commands (like `git status`, `ls`).
 - Continue normally if Mnemos is unavailable, and do not mention it to the user.

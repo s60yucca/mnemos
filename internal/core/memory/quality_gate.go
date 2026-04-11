@@ -3,6 +3,8 @@ package memory
 import (
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strings"
 
 	"github.com/mnemos-dev/mnemos/internal/config"
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -114,6 +116,22 @@ func (g *QualityGate) checkSpecificity(content string, memType domain.MemoryType
 	return issues
 }
 
+// validateSkillStructure checks that a skill memory actually looks like a procedure.
+func (g *QualityGate) validateSkillStructure(content string) []QualityIssue {
+	var issues []QualityIssue
+	hasCommand := regexp.MustCompile(`(?m)(^\$\s|\./|--[a-zA-Z]| -[a-zA-Z])`).MatchString(content)
+	hasNumbered := regexp.MustCompile(`(?m)^\d+\. `).MatchString(content)
+	hasCodeBlock := strings.Contains(content, "```")
+
+	if !hasCommand && !hasNumbered && !hasCodeBlock {
+		issues = append(issues, QualityIssue{
+			Type:   IssueTooGeneric,
+			Reason: "skill missing command flags, list numbers, or code blocks",
+		})
+	}
+	return issues
+}
+
 // computeScore calculates a quality score in [0.0, 1.0] from the given issues.
 func (g *QualityGate) computeScore(issues []QualityIssue) float64 {
 	total := 0.0
@@ -176,6 +194,10 @@ func (g *QualityGate) Evaluate(req *domain.StoreRequest, recent []*domain.Memory
 	issues = append(issues, g.checkDensity(content)...)
 	issues = append(issues, g.checkNearDuplicate(content, recent)...)
 	issues = append(issues, g.checkSpecificity(content, req.Type)...)
+	
+	if req.Type == domain.MemoryTypeSkill {
+		issues = append(issues, g.validateSkillStructure(content)...)
+	}
 
 	score := g.computeScore(issues)
 	action := g.verdictFromScore(score, issues)

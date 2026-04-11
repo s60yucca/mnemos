@@ -21,6 +21,7 @@ func newSetupCmd() *cobra.Command {
 		newSetupClientCmd("claude"),
 		newSetupClientCmd("kiro"),
 		newSetupClientCmd("cursor"),
+		newSetupClientCmd("gemini-cli"),
 	)
 
 	return cmd
@@ -49,7 +50,7 @@ func newSetupClientCmd(clientName string) *cobra.Command {
 func runSetup(clientName string, force, global bool) error {
 	clientCfg, ok := setup.Clients[clientName]
 	if !ok {
-		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor", clientName)
+		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli", clientName)
 	}
 
 	// Ensure global config exists (idempotent)
@@ -103,6 +104,10 @@ func runSetup(clientName string, force, global bool) error {
 
 	writer.Report()
 	fmt.Printf("MCP config updated: %s\n", mcpTarget)
+	
+	if clientName == "gemini-cli" {
+		fmt.Println("✅ Gemini CLI configured. Run `gemini` in this directory to verify mnemos is connected.")
+	}
 	return nil
 }
 

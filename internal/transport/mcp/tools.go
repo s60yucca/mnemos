@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -17,7 +18,7 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("Store a new memory in Mnemos"),
 		mcp.WithString("content", mcp.Required(), mcp.Description("Memory content (1 byte to 100KB)")),
 		mcp.WithString("summary", mcp.Description("Optional summary")),
-		mcp.WithString("type", mcp.Description("Memory type: short_term|long_term|episodic|semantic")),
+		mcp.WithString("type", mcp.Description("Memory type: short_term|long_term|episodic|semantic|skill|compiled")),
 		mcp.WithString("category", mcp.Description("Memory category")),
 		mcp.WithString("project_id", mcp.Description("Project scope")),
 		mcp.WithString("tags", mcp.Description("Comma-separated tags")),
@@ -77,6 +78,15 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("Run decay, archival, and GC maintenance"),
 		mcp.WithString("project_id", mcp.Description("Project scope (empty = all)")),
 	), s.handleMaintain)
+
+	// mnemos_compile
+	s.mcpServer.AddTool(mcp.NewTool("mnemos_compile",
+		mcp.WithDescription("Distill knowledge into a compiled article"),
+		mcp.WithString("topic", mcp.Required(), mcp.Description("Title/subject of the compiled article")),
+		mcp.WithString("content", mcp.Required(), mcp.Description("The compiled text")),
+		mcp.WithString("project_id", mcp.Description("Project scope")),
+		mcp.WithString("source_ids", mcp.Description("Comma-separated source memory IDs")),
+	), s.handleCompile)
 }
 
 func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -141,6 +151,18 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	if err != nil {
 		return mcpError(err.Error()), nil
+	}
+
+	for _, res := range results {
+		if res.Memory != nil {
+			if res.Memory.Type == domain.MemoryTypeCompiled {
+				res.MatchSnippet = fmt.Sprintf("[%s] %s", "compiled", res.MatchSnippet)
+				res.Memory.Content = fmt.Sprintf("### [compiled]\n%s", res.Memory.Content)
+			} else if res.Memory.Type == domain.MemoryTypeSkill {
+				res.MatchSnippet = fmt.Sprintf("[%s] %s", "skill", res.MatchSnippet)
+				res.Memory.Content = fmt.Sprintf("### [skill]\n%s", res.Memory.Content)
+			}
+		}
 	}
 
 	out, _ := json.Marshal(results)
@@ -250,6 +272,94 @@ func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcpError(err.Error()), nil
 	}
 	return mcpText(`{"status":"ok","message":"maintenance complete"}`), nil
+}
+
+func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	topic := req.GetString("topic", "")
+	if topic == "" {
+		return mcpError("topic is required"), nil
+	}
+	content := req.GetString("content", "")
+	if content == "" {
+		return mcpError("content is required"), nil
+	}
+
+	projectID := req.GetString("project_id", "")
+	sourceIDsStr := req.GetString("source_ids", "")
+
+	// 1. Find previous versions to weaken
+	var previousArts []*domain.Memory
+	arts, err := s.mnemos.GetCompiledArticles(ctx, projectID, 50)
+	if err == nil {
+		for _, a := range arts {
+			if a.Metadata != nil && strings.EqualFold(a.Metadata["topic"], topic) {
+				previousArts = append(previousArts, a)
+			}
+		}
+	}
+
+	weakenedCount := 0
+	for _, a := range previousArts {
+		if err := s.mnemos.ReduceRelevance(ctx, a.ID, 0.5, 0.05); err == nil {
+			weakenedCount++
+		}
+	}
+
+	// 2. Store new article
+	storeReq := &domain.StoreRequest{
+		Content:   content,
+		Type:      domain.MemoryTypeCompiled,
+		ProjectID: projectID,
+		Metadata: map[string]string{
+			"topic":       topic,
+			"compiled_by": "agent",
+			"compiled_at": time.Now().UTC().Format(time.RFC3339),
+			"version":     fmt.Sprintf("%d", weakenedCount+1),
+		},
+	}
+	if sourceIDsStr != "" {
+		storeReq.Metadata["source_ids"] = sourceIDsStr
+	}
+
+	res, err := s.mnemos.Store(ctx, storeReq)
+	if err != nil {
+		return mcpError(err.Error()), nil
+	}
+	articleID := res.Memory.ID
+
+	// 3. Create relations and reduce source strength
+	sourceCount := 0
+	if sourceIDsStr != "" {
+		sources := strings.Split(sourceIDsStr, ",")
+		for _, srcID := range sources {
+			srcID = strings.TrimSpace(srcID)
+			if srcID == "" {
+				continue
+			}
+			_, relErr := s.mnemos.Relate(ctx, &domain.RelateRequest{
+				SourceID:     articleID,
+				TargetID:     srcID,
+				RelationType: domain.RelationTypeCompiledFrom,
+				Strength:     1.0,
+			})
+			if relErr == nil {
+				sourceCount++
+				s.mnemos.ReduceRelevance(ctx, srcID, 0.3, 0.05)
+			}
+		}
+	}
+
+	msg := fmt.Sprintf("Compiled %d memories into '%s' (%d previous version weakened)", sourceCount, topic, weakenedCount)
+	outMap := map[string]any{
+		"article_id":                 articleID,
+		"topic":                      topic,
+		"source_count":               sourceCount,
+		"previous_articles_weakened": weakenedCount,
+		"message":                    msg,
+	}
+
+	out, _ := json.Marshal(outMap)
+	return mcpText(string(out)), nil
 }
 
 // --- helpers ---

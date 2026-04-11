@@ -332,3 +332,70 @@ func TestHandleStore_RejectIsNotMCPError(t *testing.T) {
 	require.NotNil(t, result)
 	assert.False(t, result.IsError, "Reject verdict must not set isError=true")
 }
+
+func TestHandleCompile(t *testing.T) {
+	server, mn, _ := newTestServer(t)
+	ctx := context.Background()
+
+	// Store source memories
+	src1, err := mn.Store(ctx, &domain.StoreRequest{Content: "source 1", ProjectID: "proj-compile"})
+	require.NoError(t, err)
+	src2, err := mn.Store(ctx, &domain.StoreRequest{Content: "source 2", ProjectID: "proj-compile"})
+	require.NoError(t, err)
+
+	// Call compile
+	result, err := server.handleCompile(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"topic":      "Test Compilation",
+				"content":    "## Test Compilation\nCombined article.",
+				"project_id": "proj-compile",
+				"source_ids": src1.Memory.ID + "," + src2.Memory.ID,
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &payload))
+	assert.Equal(t, "Test Compilation", payload["topic"])
+	assert.Equal(t, float64(2), payload["source_count"]) // JSON numbers are float64
+
+	articleID := payload["article_id"].(string)
+
+	// Verify new article
+	art, err := mn.Get(ctx, articleID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.MemoryTypeCompiled, art.Type)
+	assert.Equal(t, "1", art.Metadata["version"])
+
+	// Verify previous articles weakening logic by compiling again
+	result2, err := server.handleCompile(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"topic":      "Test Compilation", // Same topic
+				"content":    "## Test Compilation\nUpdated combined article.",
+				"project_id": "proj-compile",
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, result2.IsError)
+
+	var payload2 map[string]any
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result2)), &payload2))
+	assert.Equal(t, float64(1), payload2["previous_articles_weakened"])
+
+	// Check that previous version was weakened
+	art1Updated, err := mn.Get(ctx, articleID)
+	require.NoError(t, err)
+	assert.InDelta(t, 0.5, art1Updated.RelevanceScore, 0.001)
+
+	// Check new version score
+	article2ID := payload2["article_id"].(string)
+	art2, err := mn.Get(ctx, article2ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.MemoryTypeCompiled, art2.Type)
+	assert.Equal(t, "2", art2.Metadata["version"])
+}

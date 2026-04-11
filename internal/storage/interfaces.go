@@ -22,6 +22,13 @@ type IMemoryStore interface {
 	ListForLifecycle(ctx context.Context, q LifecycleQuery) ([]*domain.Memory, error)
 	CountMemoriesSince(ctx context.Context, projectID string, since time.Time) (int, error)
 	Stats(ctx context.Context, projectID string) (*Stats, error)
+
+	// New Phase 1 primitives
+	GetRecentMemories(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error)
+	GetLastSessionSummary(ctx context.Context, projectID string) (*domain.Memory, error)
+	GetCompiledArticles(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error)
+	ReduceRelevance(ctx context.Context, id string, delta float64, minScore float64) error
+
 	Close() error
 	Ping(ctx context.Context) error
 }

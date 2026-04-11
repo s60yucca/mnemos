@@ -9,6 +9,34 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/domain"
 )
 
+// sessionEndReminder returns a context injection for the agent at session end,
+// tiered by how many memories were stored during the session.
+// Returns empty string when count >= 3 (agent was actively storing — no nagging).
+func sessionEndReminder(count int) string {
+	switch {
+	case count == 0:
+		return `## ⚠️ Session Ending — No Memories Stored
+
+Before this session closes, store any durable learnings:
+
+1. **Key findings** — bugs fixed, root causes, architecture decisions
+2. **Procedures** — commands or steps that worked (store as type "skill")
+3. **Unresolved blockers** — so the next session picks up here
+
+Call ` + "`mnemos_store`" + ` for each. If nothing notable happened, ignore this.`
+	case count < 3:
+		memWord := "memory"
+		if count > 1 {
+			memWord = "memories"
+		}
+		return fmt.Sprintf(
+			"## Session Ending — %d %s stored\n\nAnything else worth keeping? Key decisions, commands that worked, or things to pick up next time.",
+			count, memWord)
+	default:
+		return ""
+	}
+}
+
 func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*HookOutput, error) {
 	// 1. RESOLVE SESSION ID
 	sessionID := resolveSessionID(input)
@@ -54,8 +82,11 @@ func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*Ho
 	// 6. CLEANUP STATE
 	_ = stateManager.Delete(sessionID)
 
-	// 7. RETURN
-	return &HookOutput{
+	// 7. BUILD REMINDER (tier based on memories stored)
+	reminder := sessionEndReminder(count)
+
+	// 8. RETURN
+	out := &HookOutput{
 		Status:  "ok",
 		Message: fmt.Sprintf("session ended, %d memories", count),
 		Metadata: map[string]any{
@@ -63,5 +94,13 @@ func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*Ho
 			"searches_performed": len(state.RecentSearches),
 			"session_duration":   time.Since(state.StartedAt).String(),
 		},
-	}, nil
+	}
+	if reminder != "" {
+		out.HookSpecificOutput = &HookSpecificOutput{
+			HookEventName:     "SessionEnd",
+			AdditionalContext: reminder,
+		}
+		out.ContextInjection = reminder
+	}
+	return out, nil
 }

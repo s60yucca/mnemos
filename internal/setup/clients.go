@@ -69,4 +69,18 @@ var Clients = map[string]ClientConfig{
 			GlobalPath: ".mcp.json",
 		},
 	},
+	"gemini-cli": {
+		Name: "gemini-cli",
+		Files: []FileMapping{
+			{
+				TemplatePath: "templates/gemini-cli/GEMINI.md",
+				LocalPath:    "GEMINI.md",
+				GlobalPath:   "GEMINI.md", // Same as local, since gemini-cli may read local first. The prompt doesn't specify global path, but GEMINI.md in cwd is fine
+			},
+		},
+		MCPConfig: MCPMapping{
+			LocalPath:  ".gemini/settings.json",
+			GlobalPath: ".gemini/settings.json",
+		},
+	},
 }

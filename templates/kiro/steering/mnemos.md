@@ -21,13 +21,21 @@ Prefer a focused query such as a service name, error name, architecture concept,
 
 Call `mnemos_store` **during** the session when you discover something durable — not at the end.
 
-Store only:
+| Situation | Type | Example |
+|-----------|------|---------|
+| Bug fixed — root cause identified | `semantic` | "JWT refresh failed due to clock skew" |
+| Task completed — what happened | `episodic` | "Migrated auth to RS256 — took 3h, tested locally" |
+| Non-obvious command succeeded | **`skill`** | "Build AAR: `./gradlew :sdk:assembleRelease --no-daemon`" |
+| Architecture/design decision | `semantic` | "Using SQLite WAL for concurrency instead of Postgres" |
+| Manual compilation of topic notes | **`compiled`** | Full article: "## Auth Service\n..." |
 
-- Architecture decisions and their rationale
-- Bug root causes and how they were fixed
-- Project conventions and patterns
-- Implementation constraints or gotchas
-- Deployment or environment quirks
+> **Skill threshold**: Only store as `skill` if the command/procedure is
+> **non-obvious or project-specific**. Don't store `git status`, `ls`, `cd`.
+> Do store project-specific commands with flags, paths, or ordering requirements.
+
+> **Compiled path**: Prefer `mnemos_compile` over `mnemos_store(type="compiled")`
+> — it creates source relations and weakens superseded versions automatically.
+> Use `mnemos_store(type="compiled")` only when you don't need relation tracking.
 
 Do not store:
 
@@ -36,16 +44,6 @@ Do not store:
 - Work-in-progress notes
 - Retrieved memories (avoid re-storing what was recalled)
 - Obvious descriptions of what code does
-
-## Memory Format
-
-Each memory should answer:
-
-- What is true
-- Why it matters
-- Where it applies
-
-Include relevant tags and a short summary when useful.
 
 ## Behavior
 

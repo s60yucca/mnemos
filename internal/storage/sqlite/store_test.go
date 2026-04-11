@@ -208,3 +208,115 @@ func TestProp_CountMemoriesSinceCorrect(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, futureCount, "should count 0 when cutoff is in the future")
 }
+
+func TestSQLiteStore_GetRecentMemories(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	// Add 3 memories
+	for i := 0; i < 3; i++ {
+		mem := newTestMemory(fmt.Sprintf("recent %d", i))
+		mem.ProjectID = "proj-recent"
+		mem.CreatedAt = time.Now().Add(time.Duration(i) * time.Minute) // 0, 1m, 2m
+		require.NoError(t, store.Create(ctx, mem))
+	}
+
+	mems, err := store.GetRecentMemories(ctx, "proj-recent", 2)
+	require.NoError(t, err)
+	assert.Len(t, mems, 2)
+	// Should be sorted by created_at DESC
+	assert.True(t, mems[0].CreatedAt.After(mems[1].CreatedAt))
+}
+
+func TestSQLiteStore_GetLastSessionSummary(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	// Empty project
+	m, err := store.GetLastSessionSummary(ctx, "proj-session")
+	require.NoError(t, err)
+	assert.Nil(t, m) // should return (nil, nil)
+
+	// Has memories but no session category or auto-breadcrumb tag
+	mem := newTestMemory("ordinary")
+	mem.ProjectID = "proj-session"
+	require.NoError(t, store.Create(ctx, mem))
+
+	m2, err := store.GetLastSessionSummary(ctx, "proj-session")
+	require.NoError(t, err)
+	assert.Nil(t, m2) // still nil
+
+	// Add a session memory
+	sessMem := newTestMemory("session mem")
+	sessMem.ProjectID = "proj-session"
+	sessMem.Category = "session"
+	require.NoError(t, store.Create(ctx, sessMem))
+
+	m3, err := store.GetLastSessionSummary(ctx, "proj-session")
+	require.NoError(t, err)
+	require.NotNil(t, m3)
+	assert.Equal(t, sessMem.ID, m3.ID)
+
+	// Add an auto-breadcrumb tagged memory (more recent)
+	crumbMem := newTestMemory("crumb")
+	crumbMem.ProjectID = "proj-session"
+	crumbMem.Tags = []string{"auto-breadcrumb"}
+	crumbMem.CreatedAt = sessMem.CreatedAt.Add(1 * time.Minute)
+	require.NoError(t, store.Create(ctx, crumbMem))
+
+	m4, err := store.GetLastSessionSummary(ctx, "proj-session")
+	require.NoError(t, err)
+	require.NotNil(t, m4)
+	assert.Equal(t, crumbMem.ID, m4.ID)
+}
+
+func TestSQLiteStore_GetCompiledArticles(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	mems, err := store.GetCompiledArticles(ctx, "proj-compiled", 10)
+	require.NoError(t, err)
+	assert.Len(t, mems, 0) // Should be empty slice, not nil error
+
+	// Add compiled
+	c1 := newTestMemory("c1")
+	c1.ProjectID = "proj-compiled"
+	c1.Type = domain.MemoryTypeCompiled
+	c1.RelevanceScore = 0.5
+	require.NoError(t, store.Create(ctx, c1))
+
+	c2 := newTestMemory("c2")
+	c2.ProjectID = "proj-compiled"
+	c2.Type = domain.MemoryTypeCompiled
+	c2.RelevanceScore = 0.8
+	require.NoError(t, store.Create(ctx, c2))
+
+	mems2, err := store.GetCompiledArticles(ctx, "proj-compiled", 10)
+	require.NoError(t, err)
+	assert.Len(t, mems2, 2)
+	assert.Equal(t, c2.ID, mems2[0].ID) // Sorted by relevance DESC
+	assert.Equal(t, c1.ID, mems2[1].ID)
+}
+
+func TestSQLiteStore_ReduceRelevance(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	mem := newTestMemory("reduce score me")
+	mem.RelevanceScore = 0.8
+	require.NoError(t, store.Create(ctx, mem))
+
+	// Reduce by 0.3, floor at 0.05
+	require.NoError(t, store.ReduceRelevance(ctx, mem.ID, 0.3, 0.05))
+	got, _ := store.GetByID(ctx, mem.ID)
+	assert.InDelta(t, 0.5, got.RelevanceScore, 0.001)
+
+	// Reduce by 1.0, should hit floor
+	require.NoError(t, store.ReduceRelevance(ctx, mem.ID, 1.0, 0.05))
+	got2, _ := store.GetByID(ctx, mem.ID)
+	assert.InDelta(t, 0.05, got2.RelevanceScore, 0.001)
+
+	// NotFound error
+	err := store.ReduceRelevance(ctx, "nonexistent", 0.1, 0.05)
+	assert.ErrorIs(t, err, domain.ErrNotFound)
+}

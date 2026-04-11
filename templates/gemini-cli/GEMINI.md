@@ -28,7 +28,6 @@ Use the `mnemos_store` tool to capture durable learnings **during** the session,
 - Retrieved memories (avoid re-storing what was recalled)
 - Obvious descriptions of what code does
 
-
 ## Retrieval
 
 At session start, use `mnemos_context` with the current task as the query to load relevant prior context.

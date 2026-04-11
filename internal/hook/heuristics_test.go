@@ -36,11 +36,11 @@ func TestIsGenericPrompt(t *testing.T) {
 		{"makes sense", true},
 		{"got it", true},
 		{"understood", true},
-		{"yes please", false}, // "please" not in generic set
-		{"fix the auth bug", false},
-		{"ok let's refactor", false}, // "ok" matches but full string does not
-		{"implement authentication", false},
-		{"", false},
+		{"yes please", true},             // "please" is not meaningful; overall too vague
+		{"fix the auth bug", false},       // has technical term "auth"
+		{"ok let's refactor", false},      // "refactor" is a technical-adjacent term
+		{"implement authentication", false}, // "authentication" is a tech term
+		{"", true},                        // empty → generic (new behaviour: true)
 	}
 
 	for _, c := range cases {
@@ -56,11 +56,15 @@ func TestDetectTopic(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"fix the auth middleware bug", "fix auth middleware bug"},
-		{"what's the best caching strategy for API?", "whats best caching strategy api"},
-		{"continue", "continue"},
+		// Tech-term priority: auth + middleware both technical → those 2 selected, plus next non-stop word
+		{"fix the auth middleware bug", "auth middleware"},
+		// Tech-term priority: caching + api → 2 tech terms
+		{"what's the best caching strategy for API?", "caching api"},
+		// Single meaningful word → empty (too vague to search for)
+		{"continue", ""},
 		{"", ""},
 		{"the a an is are", ""},
+		// All 4 words are tech terms (implement, jwt, authentication, middleware) → all returned up to cap of 4
 		{"implement JWT authentication middleware", "implement jwt authentication middleware"},
 	}
 

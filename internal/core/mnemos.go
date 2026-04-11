@@ -141,6 +141,27 @@ func (m *Mnemos) Search(ctx context.Context, query, projectID string, limit int)
 	return m.searchEngine.HybridSearch(ctx, query, projectID, limit)
 }
 
+// GetRecentMemories returns the N most recent memories for a project
+func (m *Mnemos) GetRecentMemories(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
+	return m.store.GetRecentMemories(ctx, projectID, limit)
+}
+
+// GetLastSessionSummary returns the most recent session summary/breadcrumb
+func (m *Mnemos) GetLastSessionSummary(ctx context.Context, projectID string) (*domain.Memory, error) {
+	return m.store.GetLastSessionSummary(ctx, projectID)
+}
+
+// GetCompiledArticles returns compiled articles sorted by relevance
+func (m *Mnemos) GetCompiledArticles(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
+	return m.store.GetCompiledArticles(ctx, projectID, limit)
+}
+
+// ReduceRelevance lowers the relevance score of a memory
+func (m *Mnemos) ReduceRelevance(ctx context.Context, id string, delta, minScore float64) error {
+	return m.store.ReduceRelevance(ctx, id, delta, minScore)
+}
+
+
 // SemanticSearch performs vector similarity search only
 func (m *Mnemos) SemanticSearch(ctx context.Context, query, projectID string, limit int, minSim float64) ([]*storage.SearchResult, error) {
 	return m.searchEngine.SemanticSearch(ctx, query, projectID, limit, minSim)

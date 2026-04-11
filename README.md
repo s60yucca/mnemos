@@ -56,6 +56,9 @@ Mnemos isn't just a dumb database. It actively injects memory into your workflow
 # For Kiro (Fully Tested & Highly Recommended)
 mnemos setup kiro
 
+# For Gemini CLI / Antigravity (Google)
+mnemos setup gemini-cli
+
 # For Cursor (Experimental - Community Testing)
 mnemos setup cursor
 
@@ -84,7 +87,7 @@ From now on:
 | **Memory Decay / GC** | ❌ | ❌ | ✅ | **✅** |
 | **Smart Deduplication** | ❌ | ❌ | ❌ | **✅ (3-tier)** |
 | **Token-budget Context** | ❌ | partial | ❌ | **✅** |
-| **Works w/ Cursor & Windsurf** | ❌ | ✅ | ✅ | **✅** |
+| **Works w/ Gemini & Cursor**  | ❌ | ✅ | ✅ | **✅** |
 
 ---
 

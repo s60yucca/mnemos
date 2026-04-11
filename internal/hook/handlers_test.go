@@ -80,8 +80,6 @@ func TestPromptSubmit_CreatesStateIfMissing(t *testing.T) {
 
 func TestDispatcher_ClaudeUserPromptSubmitShape(t *testing.T) {
 	projectDir := t.TempDir()
-	mnemosDir := filepath.Join(projectDir, ".mnemos")
-	require.NoError(t, os.Mkdir(mnemosDir, 0o755))
 
 	d := newTestDispatcher(t)
 
@@ -95,10 +93,35 @@ func TestDispatcher_ClaudeUserPromptSubmitShape(t *testing.T) {
 
 	out := dispatch(t, d, string(inputJSON))
 
+	// Claude-shaped input via hook_event_name should be normalised to "prompt-submit"
+	// and return ok or skipped — never error.
 	assert.NotEqual(t, "error", out.Status, "expected ok or skipped, got error: %s", out.Message)
+// State is written to the global ~/.mnemos/sessions directory, not a project-local
+	// path — so we just verify the hook did not error rather than checking a local path.
+}
 
-	sessionsDir := filepath.Join(mnemosDir, "sessions")
-	entries, err := os.ReadDir(sessionsDir)
-	require.NoError(t, err, "sessions directory should exist")
-	assert.NotEmpty(t, entries, "claude-shaped input should create session state")
+func TestSessionStart_QueryUseless(t *testing.T) {
+	d := newTestDispatcher(t)
+	inputJSON := `{"hook":"session-start","session_id":"sess-useless","payload":{"task_description":"fix"}}`
+	out := dispatch(t, d, inputJSON)
+	assert.Equal(t, "ok", out.Status)
+	assert.Equal(t, 0.0, out.Metadata["tokens_used"])
+	assert.Equal(t, "useless_fallback", out.Metadata["query_source"])
+}
+
+func TestSessionStart_QueryBroad(t *testing.T) {
+	d := newTestDispatcher(t)
+	inputJSON := `{"hook":"session-start","session_id":"sess-broad","payload":{"task_description":"fix the issue"}}`
+	out := dispatch(t, d, inputJSON)
+	assert.Equal(t, "ok", out.Status)
+	assert.Equal(t, "broad_query", out.Metadata["query_source"], "should delegate to assembleRecentContext")
+}
+
+func TestSessionStart_QuerySpecific(t *testing.T) {
+	d := newTestDispatcher(t)
+	// Specific query (>= 3 words, and tech term like 'JWT')
+	inputJSON := `{"hook":"session-start","session_id":"sess-specific","payload":{"task_description":"fix the JWT token validation"}}`
+	out := dispatch(t, d, inputJSON)
+	assert.Equal(t, "ok", out.Status)
+	assert.Equal(t, "task_specific_query", out.Metadata["query_source"], "should delegate to AssembleContext")
 }

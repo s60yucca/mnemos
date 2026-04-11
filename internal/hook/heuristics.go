@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// genericSet contains prompts that are considered generic/non-specific.
+// genericSet contains single-word prompts that are considered generic/non-specific.
 var genericSet = map[string]bool{
 	"continue":    true,
 	"ok":          true,
@@ -37,6 +37,30 @@ var genericSet = map[string]bool{
 	"understood":  true,
 }
 
+// genericPrefixes are multi-word phrase starts that mark a prompt as generic.
+// Prefix matching catches "can you help me fix X" → still generic opener even with content after.
+var genericPrefixes = []string{
+	"can you help",
+	"help me",
+	"please help",
+	"what do you think",
+	"let's start",
+	"let's begin",
+	"what next",
+	"now what",
+	"i see",
+	"ok do it",
+	"yes please",
+	"no problem",
+	"no worries",
+	"never mind",
+	"forget it",
+	"ignore that",
+	"that's fine",
+	"that's great",
+	"that's perfect",
+}
+
 // stopWords contains words to remove during topic detection.
 var stopWords = map[string]bool{
 	"the": true, "a": true, "an": true, "is": true, "are": true,
@@ -56,31 +80,111 @@ var stopWords = map[string]bool{
 	"work": true, "help": true, "using": true, "like": true,
 }
 
+// techKeywords is a curated set of common technical terms that get priority in topic detection.
+var techKeywords = map[string]bool{
+	"api": true, "jwt": true, "auth": true, "sdk": true, "config": true,
+	"deploy": true, "pipeline": true, "database": true, "schema": true,
+	"endpoint": true, "docker": true, "kubernetes": true, "gradle": true,
+	"maven": true, "npm": true, "yarn": true, "webpack": true,
+	"sql": true, "nosql": true, "redis": true, "postgres": true, "mysql": true,
+	"sqlite": true, "mongo": true, "git": true, "ci": true, "cd": true,
+	"ssl": true, "tls": true, "http": true, "https": true, "grpc": true,
+	"rest": true, "graphql": true, "websocket": true, "socket": true,
+	"token": true, "oauth": true, "session": true, "cookie": true,
+	"middleware": true, "handler": true, "router": true, "controller": true,
+	"service": true, "repository": true, "model": true, "migration": true,
+	"test": true, "mock": true, "fixture": true, "lint": true, "build": true,
+	"release": true, "tag": true, "branch": true, "merge": true, "rebase": true,
+	"crash": true, "panic": true, "leak": true, "race": true, "deadlock": true,
+	"goroutine": true, "thread": true, "async": true, "await": true, "callback": true,
+	"hook": true, "event": true, "listener": true, "subscriber": true,
+	"android": true, "ios": true, "kotlin": true, "swift": true, "flutter": true,
+	"react": true, "vue": true, "angular": true, "node": true, "golang": true,
+	"python": true, "java": true, "typescript": true, "javascript": true,
+	// Common technical-adjacent terms
+	"authentication": true, "authorization": true, "encryption": true,
+	"refactor": true, "implement": true, "optimize": true, "debug": true,
+	"performance": true, "latency": true, "throughput": true, "memory": true,
+	"query": true, "index": true, "cache": true, "caching": true,
+	"error": true, "exception": true, "timeout": true, "retry": true,
+	"logging": true, "metrics": true, "tracing": true, "monitoring": true,
+	"payload": true, "request": true, "response": true, "header": true,
+	"function": true, "method": true, "struct": true, "interface": true,
+	"channel": true, "mutex": true, "concurrent": true,
+}
+
 // normalizePrompt lowercases, trims whitespace, and strips trailing punctuation.
 func normalizePrompt(text string) string {
 	s := strings.ToLower(strings.TrimSpace(text))
-	// Strip trailing punctuation
 	s = strings.TrimRightFunc(s, func(r rune) bool {
 		return unicode.IsPunct(r)
 	})
 	return strings.TrimSpace(s)
 }
 
-// IsGenericPrompt returns true if the prompt is a generic/non-specific response.
-// Exact match only — no prefix matching.
+// isTechnicalTerm returns true when a word looks like a technical identifier:
+// contains code-oriented characters (dots, underscores, slashes), is camelCase/PascalCase,
+// or is in the curated techKeywords list.
+func isTechnicalTerm(word string) bool {
+	if word == "" {
+		return false
+	}
+	// Known technical keywords (lowercase comparison)
+	if techKeywords[strings.ToLower(word)] {
+		return true
+	}
+	// Contains characters typical of identifiers and paths
+	if strings.ContainsAny(word, "._/\\:@#$") {
+		return true
+	}
+	// camelCase or PascalCase: has both upper and lower letters
+	hasUpper := false
+	hasLower := false
+	for _, r := range word {
+		if unicode.IsUpper(r) {
+			hasUpper = true
+		} else if unicode.IsLower(r) {
+			hasLower = true
+		}
+		if hasUpper && hasLower {
+			return true
+		}
+	}
+	return false
+}
+
+// extractTechnicalTerms returns only the technical words from a slice.
+func extractTechnicalTerms(words []string) []string {
+	tech := make([]string, 0, len(words))
+	for _, w := range words {
+		if isTechnicalTerm(w) {
+			tech = append(tech, w)
+		}
+	}
+	return tech
+}
+
+// IsGenericPrompt returns true if the prompt carries no task-specific information.
+// Checks: empty/single-word, exact-match generic set, multi-word generic prefix,
+// and short all-generic-word prompts.
 func IsGenericPrompt(promptText string) bool {
 	normalized := normalizePrompt(promptText)
 	if normalized == "" {
-		return false
+		return true
 	}
 
-	// Check exact match against generic set
+	// Single word — always generic (even "fix" alone is not actionable)
+	words := strings.Fields(normalized)
+	if len(words) == 1 {
+		return true
+	}
+
+	// Exact match against generic set
 	if genericSet[normalized] {
 		return true
 	}
 
-	// Check if text is <= 3 words AND all words are in generic set
-	words := strings.Fields(normalized)
+	// Short (≤3 word) prompts where all words are in the generic set
 	if len(words) <= 3 {
 		allGeneric := true
 		for _, w := range words {
@@ -94,27 +198,34 @@ func IsGenericPrompt(promptText string) bool {
 		}
 	}
 
+	// Multi-word generic prefix match (catches "can you help me fix X" patterns)
+	for _, prefix := range genericPrefixes {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+
 	return false
 }
 
-// DetectTopic extracts the core topic from a prompt by removing stop words.
+// DetectTopic extracts the core topic from a prompt.
+// Strategy: if there are ≥2 technical terms, prefer those (they carry more
+// signal for memory search). Otherwise, fall back to first 4 non-stopword words.
+// Returns empty string when the result would be too vague to search.
 func DetectTopic(promptText string) string {
-	// Lowercase
+	// Lowercase, preserve hyphens (e.g. "build-time" → meaningful), strip other punct
 	s := strings.ToLower(promptText)
-
-	// Remove punctuation except hyphens
 	var sb strings.Builder
 	for _, r := range s {
-		if r == '-' || !unicode.IsPunct(r) {
+		if r == '-' || r == '_' || r == '.' || !unicode.IsPunct(r) {
 			sb.WriteRune(r)
 		}
 	}
 	s = sb.String()
 
-	// Split into words
 	words := strings.Fields(s)
 
-	// Remove stop words and collect meaningful words
+	// Remove stop words, collect meaningful tokens
 	meaningful := make([]string, 0, len(words))
 	for _, w := range words {
 		if !stopWords[w] && w != "" {
@@ -122,11 +233,23 @@ func DetectTopic(promptText string) string {
 		}
 	}
 
-	// Take first 5 meaningful words
-	if len(meaningful) > 5 {
-		meaningful = meaningful[:5]
+	if len(meaningful) < 2 {
+		return "" // too little signal — caller will skip searching
 	}
 
+	// Prefer technical terms — they make better search queries
+	tech := extractTechnicalTerms(meaningful)
+	if len(tech) >= 2 {
+		if len(tech) > 4 {
+			tech = tech[:4]
+		}
+		return strings.Join(tech, " ")
+	}
+
+	// Fall back: first 4 meaningful words
+	if len(meaningful) > 4 {
+		meaningful = meaningful[:4]
+	}
 	return strings.Join(meaningful, " ")
 }
 
@@ -147,7 +270,6 @@ func TopicChanged(newTopic, activeTopic string, threshold float64) bool {
 	setA := toWordSet(newTopic)
 	setB := toWordSet(activeTopic)
 
-	// Count intersection
 	intersection := 0
 	for w := range setA {
 		if setB[w] {
@@ -155,7 +277,6 @@ func TopicChanged(newTopic, activeTopic string, threshold float64) bool {
 		}
 	}
 
-	// Count union
 	union := len(setA)
 	for w := range setB {
 		if !setA[w] {
