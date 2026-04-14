@@ -39,6 +39,12 @@ curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | b
 # Or via Homebrew (macOS)
 brew install s60yucca/tap/mnemos
 
+# Or on Windows (via Go)
+go install github.com/s60yucca/mnemos/cmd/mnemos@latest
+```
+> **No Go? No problem:** Download the pre-compiled binary (`.zip` for Windows, `.tar.gz` for Linux/macOS) directly from the [GitHub Releases page](https://github.com/s60yucca/mnemos/releases).
+
+```bash
 # 2. First-time setup
 mnemos init
 
