@@ -140,7 +140,7 @@ Just add this JSON snippet to your client's MCP configuration file (e.g., `openc
 | `mnemos_update` | Update content, summary, or tags |
 | `mnemos_delete` | Soft-delete (recoverable via maintain) |
 | `mnemos_relate` | Link two memories with a typed relation |
-| `mnemos_context` | Assemble relevant memories within a token budget |
+| `mnemos_context` | Assemble relevant memories via HybridSearch (FTS5 + vector similarity), MMR diversity ranking, and adaptive token packing |
 | `mnemos_maintain` | Run decay, archival, and garbage collection |
 
 ---
