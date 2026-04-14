@@ -17,23 +17,25 @@ const (
 
 // ListQuery defines filtering and pagination for listing memories
 type ListQuery struct {
-	ProjectID     string
-	Types         []domain.MemoryType
-	Statuses      []domain.MemoryStatus
-	Categories    []string
-	Tags          []string // AND — memory must have all tags
-	AnyTags       []string // OR — memory must have at least one tag
-	Agent         string
-	SessionID     string
-	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
-	MinRelevance  float64
-	MaxRelevance  float64
-	SortBy        string
-	SortDesc      bool
-	Limit         int
-	Offset        int
-	Cursor        string // cursor-based pagination
+	ProjectID         string
+	Types             []domain.MemoryType
+	Statuses          []domain.MemoryStatus
+	Categories        []string
+	Tags              []string // AND — memory must have all tags
+	AnyTags           []string // OR — memory must have at least one tag
+	Agent             string
+	SessionID         string
+	CreatedAfter      *time.Time
+	CreatedBefore     *time.Time
+	MinRelevance      float64
+	MaxRelevance      float64
+	SortBy            string
+	SortDesc          bool
+	Limit             int
+	Offset            int
+	Cursor            string   // cursor-based pagination
+	ExcludeCategories []string // skip memories with these categories (SQL NOT IN)
+	ExcludeTypes      []string // skip memories with these types (SQL NOT IN)
 }
 
 // TextSearchQuery defines a full-text search request

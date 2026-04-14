@@ -25,6 +25,8 @@ Your AI learns architecture decisions, bug root causes, and project conventions 
 * **1-Click Autopilot:** Instantly wires hooks, `.cursorrules`, and MCP configs for Claude Code, Cursor, and Kiro.
 * **Smart Lifecycle:** Built-in 3-tier deduplication, relevance decay, and garbage collection. It only remembers what actually matters.
 * **Hybrid Search:** Fast local FTS5 keyword search + optional Semantic Vector search (Ollama/OpenAI) using Reciprocal Rank Fusion (RRF).
+* **✨ NEW - Knowledge Synthesis:** Introduces the `mnemos_compile` tool for the AI to distill fragmented memories into comprehensive, long-term architectural documents.
+* **✨ NEW - Intelligent Hooks:** Advanced heuristic prompt filtering (detects technical terms) and session-end memory reminders ensure your agent never misses an important insight.
 
 ---
 
@@ -42,7 +44,7 @@ brew install s60yucca/tap/mnemos
 # Or on Windows (via Go)
 go install github.com/s60yucca/mnemos/cmd/mnemos@latest
 ```
-> **No Go? No problem:** Download the pre-compiled binary (`.zip` for Windows, `.tar.gz` for Linux/macOS) directly from the [GitHub Releases page](https://github.com/s60yucca/mnemos/releases).
+> **No Go? No problem:** Download the pre-compiled binary (`.zip` for Windows) directly from the [GitHub Releases page](https://github.com/s60yucca/mnemos/releases). Extract `mnemos.exe` and add its folder to your system's `PATH` environment variable so the Autopilot tools can find it.
 
 ```bash
 # 2. First-time setup
@@ -82,6 +84,31 @@ From now on:
 
 ---
 
+## 🤖 Using with OpenClaw, Paperclip, or any MCP Client
+
+If you are using emerging AI frameworks like **OpenClaw (Claw bot)**, **Paperclip**, or **Claude Desktop**, you can easily connect Mnemos manually. Mnemos speaks standard MCP over `stdio`. 
+
+Just add this JSON snippet to your client's MCP configuration file (e.g., `openclaw.json`, `paperclip.config.json`, or `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mnemos": {
+      "command": "mnemos",
+      "args": ["serve"],
+      "env": {
+        "MNEMOS_PROJECT_ID": "my-awesome-project"
+      }
+    }
+  }
+}
+```
+
+> **💡 Windows Tip:** If you downloaded the `.exe` file and prefer not to add it to your system's `PATH`, simply change the `"command"` field to the exact folder path where you extracted it. For example: 
+> `"command": "C:\\Users\\YourName\\Downloads\\mnemos.exe"`
+
+---
+
 ## 🆚 Why Mnemos?
 
 | Feature | claude-mem | engram | neural-memory | **mnemos** 🧠 |
@@ -94,6 +121,22 @@ From now on:
 | **Smart Deduplication** | ❌ | ❌ | ❌ | **✅ (3-tier)** |
 | **Token-budget Context** | ❌ | partial | ❌ | **✅** |
 | **Works w/ Gemini & Cursor**  | ❌ | ✅ | ✅ | **✅** |
+
+---
+
+## 🧰 MCP Tools
+
+| Tool | What it does |
+|------|-------------|
+| `mnemos_store` | Store a memory with optional type, tags, project scope |
+| `mnemos_compile` | Distill knowledge into a compiled article from multiple sources |
+| `mnemos_search` | Hybrid FTS + semantic search with RRF ranking |
+| `mnemos_get` | Fetch a memory by ID |
+| `mnemos_update` | Update content, summary, or tags |
+| `mnemos_delete` | Soft-delete (recoverable via maintain) |
+| `mnemos_relate` | Link two memories with a typed relation |
+| `mnemos_context` | Assemble relevant memories within a token budget |
+| `mnemos_maintain` | Run decay, archival, and garbage collection |
 
 ---
 

@@ -262,6 +262,67 @@ func (m *Manager) HardDelete(ctx context.Context, id string) error {
 	return m.store.HardDelete(ctx, id)
 }
 
+// StoreWithoutGate persists a memory directly, bypassing the quality gate.
+// Used by the autopilot report writer so that report content (which would fail
+// the quality gate's RequireSpecific check) is always stored.
+func (m *Manager) StoreWithoutGate(ctx context.Context, req *domain.StoreRequest) (*domain.StoreResult, error) {
+	// 1. Validate
+	if err := domain.ValidateStoreRequest(req); err != nil {
+		return nil, err
+	}
+
+	// 2. Compute hash
+	hash := util.ContentHash(req.Content, req.ProjectID)
+
+	// 3. Auto-classify (respect explicit type/category from caller)
+	memType := req.Type
+	if memType == "" {
+		memType = m.classifier.ClassifyType(req.Content, req.Tags)
+	}
+	category := req.Category
+	if category == "" {
+		category = m.classifier.ClassifyCategory(req.Content, req.Tags)
+	}
+
+	// 4. Build memory
+	now := time.Now().UTC()
+	mem := &domain.Memory{
+		ID:             util.NewID(),
+		Content:        req.Content,
+		Summary:        req.Summary,
+		Type:           memType,
+		Category:       category,
+		Tags:           req.Tags,
+		Source:         req.Source,
+		ProjectID:      req.ProjectID,
+		Agent:          req.Agent,
+		SessionID:      req.SessionID,
+		Metadata:       req.Metadata,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		LastAccessedAt: now,
+		AccessCount:    0,
+		RelevanceScore: 1.0,
+		QualityScore:   1.0,
+		Status:         domain.MemoryStatusActive,
+		ContentHash:    hash,
+	}
+
+	// 5. Persist
+	if err := m.store.Create(ctx, mem); err != nil {
+		return nil, fmt.Errorf("store create: %w", err)
+	}
+
+	// 6. Queue embedding (async, non-blocking)
+	select {
+	case m.embedQueue <- mem.ID:
+	default:
+		m.logger.Warn("embed queue full, skipping", "id", mem.ID)
+	}
+
+	return &domain.StoreResult{Memory: mem, Created: true}, nil
+}
+
 // Stats returns storage statistics
 func (m *Manager) Stats(ctx context.Context, projectID string) (*storage.Stats, error) {
 	return m.store.Stats(ctx, projectID)

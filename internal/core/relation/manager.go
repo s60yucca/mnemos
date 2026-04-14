@@ -62,9 +62,20 @@ func (m *Manager) Relate(ctx context.Context, req *domain.RelateRequest) (*domai
 	return rel, nil
 }
 
+// GetRelationBetween returns an existing relation between sourceID and targetID of the
+// given type, checking both directions. Returns (nil, nil) when no relation exists.
+func (m *Manager) GetRelationBetween(ctx context.Context, sourceID, targetID string, relType domain.RelationType) (*domain.MemoryRelation, error) {
+	return m.store.GetRelationBetween(ctx, sourceID, targetID, relType)
+}
+
 // Unrelate removes a relation by ID
 func (m *Manager) Unrelate(ctx context.Context, relationID string) error {
 	return m.store.DeleteRelation(ctx, relationID)
+}
+
+// ListRelations returns relations matching the query.
+func (m *Manager) ListRelations(ctx context.Context, q storage.RelationQuery) ([]*domain.MemoryRelation, error) {
+	return m.store.ListRelations(ctx, q)
 }
 
 // Traverse performs BFS graph traversal from a starting memory

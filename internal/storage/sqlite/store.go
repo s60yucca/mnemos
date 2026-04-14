@@ -349,6 +349,86 @@ func (s *SQLiteStore) ReduceRelevance(ctx context.Context, id string, delta floa
 	return nil
 }
 
+// --- Phase 2a Autopilot Primitives ---
+
+func (s *SQLiteStore) GetLatestAutopilotReport(ctx context.Context, projectID string) (*domain.Memory, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT * FROM memories WHERE category='autopilot' AND project_id=? AND status='active' ORDER BY created_at DESC LIMIT 1`,
+		projectID,
+	)
+	m, err := scanMemory(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return m, err
+}
+
+func (s *SQLiteStore) MaxCreatedAt(ctx context.Context, projectID string) (time.Time, error) {
+	var maxNano sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MAX(created_at) FROM memories WHERE project_id=? AND status='active'`,
+		projectID,
+	).Scan(&maxNano)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !maxNano.Valid {
+		return time.Time{}, nil
+	}
+	return util.UnixNanoToTime(maxNano.Int64), nil
+}
+
+func (s *SQLiteStore) ListDistinctProjectIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT project_id FROM memories WHERE status='active' AND project_id != ''`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, rows.Err()
+}
+
+func (s *SQLiteStore) GetByIDs(ctx context.Context, ids []string) (map[string]*domain.Memory, error) {
+	if len(ids) == 0 {
+		return map[string]*domain.Memory{}, nil
+	}
+	ph := strings.Repeat("?,", len(ids))
+	ph = ph[:len(ph)-1]
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT * FROM memories WHERE id IN (%s) AND status='active'`, ph),
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]*domain.Memory)
+	for rows.Next() {
+		m, err := scanMemory(rows)
+		if err != nil {
+			return nil, err
+		}
+		result[m.ID] = m
+	}
+	return result, rows.Err()
+}
+
 func (s *SQLiteStore) Close() error                   { return s.db.Close() }
 func (s *SQLiteStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
@@ -405,6 +485,22 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 	if q.CreatedBefore != nil {
 		conditions = append(conditions, "created_at<=?")
 		args = append(args, util.TimeToUnixNano(*q.CreatedBefore))
+	}
+	if len(q.ExcludeCategories) > 0 {
+		ph := strings.Repeat("?,", len(q.ExcludeCategories))
+		ph = ph[:len(ph)-1]
+		conditions = append(conditions, fmt.Sprintf("category NOT IN (%s)", ph))
+		for _, c := range q.ExcludeCategories {
+			args = append(args, c)
+		}
+	}
+	if len(q.ExcludeTypes) > 0 {
+		ph := strings.Repeat("?,", len(q.ExcludeTypes))
+		ph = ph[:len(ph)-1]
+		conditions = append(conditions, fmt.Sprintf("type NOT IN (%s)", ph))
+		for _, t := range q.ExcludeTypes {
+			args = append(args, t)
+		}
 	}
 
 	where := ""

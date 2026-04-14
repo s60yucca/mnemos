@@ -111,6 +111,12 @@ func (m *Mnemos) Store(ctx context.Context, req *domain.StoreRequest) (*domain.S
 	return m.memManager.Store(ctx, req)
 }
 
+// StoreWithoutGate persists a memory bypassing the quality gate.
+// Used by the autopilot report writer so report content is always stored.
+func (m *Mnemos) StoreWithoutGate(ctx context.Context, req *domain.StoreRequest) (*domain.StoreResult, error) {
+	return m.memManager.StoreWithoutGate(ctx, req)
+}
+
 // Get retrieves a memory by ID (with access tracking)
 func (m *Mnemos) Get(ctx context.Context, id string) (*domain.Memory, error) {
 	return m.memManager.Get(ctx, id)
@@ -161,7 +167,6 @@ func (m *Mnemos) ReduceRelevance(ctx context.Context, id string, delta, minScore
 	return m.store.ReduceRelevance(ctx, id, delta, minScore)
 }
 
-
 // SemanticSearch performs vector similarity search only
 func (m *Mnemos) SemanticSearch(ctx context.Context, query, projectID string, limit int, minSim float64) ([]*storage.SearchResult, error) {
 	return m.searchEngine.SemanticSearch(ctx, query, projectID, limit, minSim)
@@ -175,6 +180,17 @@ func (m *Mnemos) TextSearch(ctx context.Context, q storage.TextSearchQuery) ([]*
 // Relate creates a relation between two memories
 func (m *Mnemos) Relate(ctx context.Context, req *domain.RelateRequest) (*domain.MemoryRelation, error) {
 	return m.relManager.Relate(ctx, req)
+}
+
+// ListRelations returns relations matching the query.
+func (m *Mnemos) ListRelations(ctx context.Context, q storage.RelationQuery) ([]*domain.MemoryRelation, error) {
+	return m.relManager.ListRelations(ctx, q)
+}
+
+// GetRelationBetween returns an existing relation between sourceID and targetID of the
+// given type, checking both directions. Returns (nil, nil) when no relation exists.
+func (m *Mnemos) GetRelationBetween(ctx context.Context, sourceID, targetID string, relType domain.RelationType) (*domain.MemoryRelation, error) {
+	return m.relManager.GetRelationBetween(ctx, sourceID, targetID, relType)
 }
 
 // Traverse performs graph traversal from a memory
@@ -193,6 +209,29 @@ func (m *Mnemos) Maintain(ctx context.Context, projectID string) error {
 		return err
 	}
 	return m.lifecycle.RunGC(ctx, projectID)
+}
+
+// GetLatestAutopilotReport returns the most recent autopilot report memory for a project.
+// Returns nil (not error) when no report exists.
+func (m *Mnemos) GetLatestAutopilotReport(ctx context.Context, projectID string) (*domain.Memory, error) {
+	return m.store.GetLatestAutopilotReport(ctx, projectID)
+}
+
+// MaxCreatedAt returns the maximum created_at timestamp of active memories for a project.
+// Returns zero time.Time when no memories exist (not an error).
+func (m *Mnemos) MaxCreatedAt(ctx context.Context, projectID string) (time.Time, error) {
+	return m.store.MaxCreatedAt(ctx, projectID)
+}
+
+// GetByIDs returns a map of active memories keyed by ID for the given IDs.
+// Missing or inactive IDs are silently excluded. Empty ids returns empty map.
+func (m *Mnemos) GetByIDs(ctx context.Context, ids []string) (map[string]*domain.Memory, error) {
+	return m.store.GetByIDs(ctx, ids)
+}
+
+// ListDistinctProjectIDs returns all project IDs that have at least one active memory.
+func (m *Mnemos) ListDistinctProjectIDs(ctx context.Context) ([]string, error) {
+	return m.store.ListDistinctProjectIDs(ctx)
 }
 
 // CountMemoriesSince counts active memories for a project created at or after since.

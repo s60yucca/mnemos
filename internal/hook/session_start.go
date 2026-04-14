@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
 	"github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/core/search"
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -96,7 +97,7 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 				Message: "mnemos unavailable",
 			}, nil
 		}
-		contextString = formatContextResult(result)
+		contextString = formatContextResult(ctx, d.mnemos, state.ProjectID, result)
 		tokensUsed = result.TotalTokens
 		querySource = "task_specific_query"
 	} else { // QueryBroad
@@ -129,7 +130,9 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 }
 
 // formatContextResult formats a *search.ContextResult as markdown for the AI context window.
-func formatContextResult(result *search.ContextResult) string {
+// It also queries the latest autopilot report for the project and injects it as section 3
+// ("Autopilot Suggestions") when non-nil, between "Recent Skills" and "Last Session Summary".
+func formatContextResult(ctx context.Context, m *core.Mnemos, projectID string, result *search.ContextResult) string {
 	if result == nil || len(result.Memories) == 0 {
 		return ""
 	}
@@ -147,6 +150,18 @@ func formatContextResult(result *search.ContextResult) string {
 		}
 		sb.WriteString(text)
 		sb.WriteString("\n\n")
+	}
+
+	// Section 3: Autopilot Suggestions — injected after search results when available
+	if projectID != "" {
+		if report, err := m.GetLatestAutopilotReport(ctx, projectID); err == nil && report != nil {
+			content := truncateAtSentenceBoundary(report.Content, 800)
+			sb.WriteString("### Autopilot Suggestions\n\n")
+			sb.WriteString(content)
+			sb.WriteString("\n\n")
+		} else if err != nil {
+			slog.Debug("session_start: autopilot report query failed", "err", err)
+		}
 	}
 
 	return strings.TrimRight(sb.String(), "\n") + "\n"
@@ -190,10 +205,11 @@ func assessQueryQuality(query, projectID string) QueryQuality {
 
 func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string, maxTokens int) string {
 	const (
-		capCompiled = 600
-		capSkills   = 300
-		capSession  = 200
-		capRecent   = 200
+		capCompiled  = 500
+		capSkills    = 250
+		capAutopilot = 200
+		capSession   = 150
+		capRecent    = 200
 	)
 	estimateTokens := func(s string) int { return len(s) / 4 }
 
@@ -217,7 +233,7 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 				c = mem.Summary + "\n" + c
 			}
 			c = truncator(c, (cap-secTokens)*4)
-			
+
 			entry := fmt.Sprintf("- %s\n\n", c)
 			tks := estimateTokens(entry)
 			if secTokens+tks > cap {
@@ -226,7 +242,7 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 			secSb.WriteString(entry)
 			secTokens += tks
 		}
-		
+
 		if secTokens > estimateTokens("### "+title+"\n\n") {
 			if totalTokens+secTokens > maxTokens {
 				return
@@ -288,6 +304,24 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 
 	addSection("Recent Skills", skills, capSkills, truncCodeBlock)
 
+	// Section 3: Autopilot Suggestions
+	if projectID != "" {
+		if report, err := m.GetLatestAutopilotReport(ctx, projectID); err == nil && report != nil {
+			content := truncateAtSentenceBoundary(report.Content, 800)
+			if totalTokens < maxTokens {
+				secTokens := estimateTokens("### Autopilot Suggestions\n\n" + content + "\n\n")
+				if secTokens <= capAutopilot && totalTokens+secTokens <= maxTokens {
+					sb.WriteString("### Autopilot Suggestions\n\n")
+					sb.WriteString(content)
+					sb.WriteString("\n\n")
+					totalTokens += secTokens
+				}
+			}
+		} else if err != nil {
+			slog.Debug("session_start: autopilot report query failed", "err", err)
+		}
+	}
+
 	summary, _ := m.GetLastSessionSummary(ctx, projectID)
 	if summary != nil {
 		addSection("Last Session Summary", []*domain.Memory{summary}, capSession, truncParagraph)
@@ -299,4 +333,22 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 		return ""
 	}
 	return "## Recent Context\n\n" + sb.String()
+}
+
+// truncateAtSentenceBoundary truncates s to at most maxChars characters,
+// preferring to cut at a sentence boundary (". ") to avoid mid-sentence truncation.
+func truncateAtSentenceBoundary(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+	truncated := s[:maxChars]
+	// Try to cut at the last sentence boundary
+	if idx := strings.LastIndex(truncated, ". "); idx > 0 {
+		return truncated[:idx+1]
+	}
+	// Fall back to last newline
+	if idx := strings.LastIndex(truncated, "\n"); idx > 0 {
+		return truncated[:idx]
+	}
+	return truncated
 }

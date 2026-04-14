@@ -29,6 +29,12 @@ type IMemoryStore interface {
 	GetCompiledArticles(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error)
 	ReduceRelevance(ctx context.Context, id string, delta float64, minScore float64) error
 
+	// Phase 2a autopilot primitives
+	GetLatestAutopilotReport(ctx context.Context, projectID string) (*domain.Memory, error)
+	MaxCreatedAt(ctx context.Context, projectID string) (time.Time, error)
+	ListDistinctProjectIDs(ctx context.Context) ([]string, error)
+	GetByIDs(ctx context.Context, ids []string) (map[string]*domain.Memory, error)
+
 	Close() error
 	Ping(ctx context.Context) error
 }

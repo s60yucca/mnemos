@@ -10,6 +10,18 @@ import (
 	"github.com/spf13/viper"
 )
 
+// AutopilotConfig holds configuration for the passive autopilot daemon.
+type AutopilotConfig struct {
+	Enabled                bool          `mapstructure:"enabled"`
+	Interval               time.Duration `mapstructure:"interval"`
+	InitialDelay           time.Duration `mapstructure:"initial_delay"`
+	MaxCompiledPerRun      int           `mapstructure:"max_compiled_per_run"`
+	MaxMemoriesPerRun      int           `mapstructure:"max_memories_per_run"`
+	MaxContradictionPairs  int           `mapstructure:"max_contradiction_pairs"`
+	ContradictionEnabled   bool          `mapstructure:"contradiction_enabled"`
+	ContradictionThreshold float64       `mapstructure:"contradiction_threshold"`
+}
+
 // Config holds all application configuration
 type Config struct {
 	DataDir     string            `mapstructure:"data_dir"`
@@ -22,6 +34,7 @@ type Config struct {
 	Server      ServerConfig      `mapstructure:"server"`
 	Hook        HookConfig        `mapstructure:"hook"`
 	QualityGate QualityGateConfig `mapstructure:"quality_gate"`
+	Autopilot   AutopilotConfig   `mapstructure:"autopilot"`
 }
 
 // QualityGateConfig holds configuration for the memory quality gate pipeline stage.
@@ -147,6 +160,16 @@ func DefaultConfig() *Config {
 				Fix:       0.5,
 				Downgrade: 0.3,
 			},
+		},
+		Autopilot: AutopilotConfig{
+			Enabled:                true,
+			Interval:               15 * time.Minute,
+			InitialDelay:           30 * time.Second,
+			MaxCompiledPerRun:      50,
+			MaxMemoriesPerRun:      200,
+			MaxContradictionPairs:  100,
+			ContradictionEnabled:   false,
+			ContradictionThreshold: 0.3,
 		},
 	}
 }

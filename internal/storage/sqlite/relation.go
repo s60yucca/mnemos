@@ -86,8 +86,11 @@ func (r *RelationStore) ListRelations(ctx context.Context, q storage.RelationQue
 
 func (r *RelationStore) GetRelationBetween(ctx context.Context, sourceID, targetID string, relType domain.RelationType) (*domain.MemoryRelation, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT * FROM memory_relations WHERE source_id=? AND target_id=? AND relation_type=?`,
-		sourceID, targetID, string(relType),
+		`SELECT * FROM memory_relations
+		 WHERE ((source_id=? AND target_id=?) OR (source_id=? AND target_id=?))
+		   AND relation_type=?
+		 LIMIT 1`,
+		sourceID, targetID, targetID, sourceID, string(relType),
 	)
 	rel, err := scanRelation(row)
 	if err == sql.ErrNoRows {

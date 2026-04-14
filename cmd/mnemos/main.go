@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mnemos-dev/mnemos/internal/autopilot"
 	"github.com/mnemos-dev/mnemos/internal/config"
 	core "github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
@@ -110,10 +111,16 @@ func main() {
 	mnemos.Start()
 	defer mnemos.Shutdown()
 
+	// Autopilot daemon (started at application level to avoid circular import core→autopilot→core)
+	daemon := autopilot.NewAutopilotDaemon(mnemos, cfg.Autopilot, logger, autopilot.NewReportWriter(mnemos))
+	daemon.Start()
+	defer daemon.Stop()
+
 	// CLI
 	rootCmd := cli.NewRootCmd(mnemos, resolveVersion())
 	rootCmd.AddCommand(newHookCmd(cfg))
 	rootCmd.AddCommand(newSetupCmd())
+	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)
