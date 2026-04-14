@@ -33,27 +33,33 @@ Your AI learns architecture decisions, bug root causes, and project conventions 
 
 ## ⚡ Quick Start
 
-Get up and running in 30 seconds:
-
+**macOS**
 ```bash
-# 1. Install via curl (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
-
-# Or via Homebrew (macOS)
 brew install s60yucca/tap/mnemos
-
-# Or on Windows (via Go)
-go install github.com/s60yucca/mnemos/cmd/mnemos@latest
 ```
-> **No Go? No problem:** Download the pre-compiled binary (`.zip` for Windows) directly from the [GitHub Releases page](https://github.com/s60yucca/mnemos/releases). Extract `mnemos.exe` and add its folder to your system's `PATH` environment variable so the Autopilot tools can find it.
 
+**Linux**
 ```bash
-# 2. First-time setup
-mnemos init
+curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
+```
 
-# 3. Start the MCP server (runs in background/stdio)
+**Windows** (PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/s60yucca/mnemos/main/install.ps1 | iex
+```
+
+> Corporate machines with restricted execution policy:
+> ```powershell
+> powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/s60yucca/mnemos/main/install.ps1 | iex"
+> ```
+
+Then on any platform:
+```bash
+mnemos init
 mnemos serve
 ```
+
+**Alternative installs:** `go install github.com/s60yucca/mnemos/cmd/mnemos@latest` works on all platforms if you have Go. Manual binaries on the [Releases page](https://github.com/s60yucca/mnemos/releases).
 
 ---
 
@@ -104,9 +110,6 @@ Just add this JSON snippet to your client's MCP configuration file (e.g., `openc
   }
 }
 ```
-
-> **💡 Windows Tip:** If you downloaded the `.exe` file and prefer not to add it to your system's `PATH`, simply change the `"command"` field to the exact folder path where you extracted it. For example: 
-> `"command": "C:\\Users\\YourName\\Downloads\\mnemos.exe"`
 
 ---
 

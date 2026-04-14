@@ -210,6 +210,8 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 		capAutopilot = 200
 		capSession   = 150
 		capRecent    = 200
+		// Section caps sum to 1300. The remaining 200 tokens (to the 1500 total guard)
+		// are reserved for section headers, formatting overhead, and future sections.
 	)
 	estimateTokens := func(s string) int { return len(s) / 4 }
 

@@ -29,11 +29,48 @@ type SearchEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// ResolveSessionDir returns the path to the sessions directory under ~/.mnemos/.
+// ResolveSessionDir returns the path to the sessions directory.
+// Priority order:
+//  1. Project-local: <projectDir>/.mnemos/<sessionDir>  (if projectDir is non-empty and writable)
+//  2. Global fallback: ~/.mnemos/<sessionDir>
+//  3. Relative fallback: .mnemos/<sessionDir>  (when home dir is unavailable, e.g. sandboxed CI)
 func ResolveSessionDir(projectDir string, sessionDir string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".mnemos", sessionDir)
+	// 1. Project-local path — preferred when a project dir is known
+	if projectDir != "" {
+		local := filepath.Join(projectDir, ".mnemos", sessionDir)
+		if isWritableDir(local) {
+			return local
+		}
+		// Try to create it — if that succeeds, it's usable
+		if err := os.MkdirAll(local, 0o755); err == nil {
+			return local
+		}
 	}
-	return filepath.Join(home, ".mnemos", sessionDir)
+
+	// 2. Global ~/.mnemos/<sessionDir>
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".mnemos", sessionDir)
+	}
+
+	// 3. Relative fallback for sandboxed/containerized environments
+	return filepath.Join(".mnemos", sessionDir)
+}
+
+// isWritableDir returns true if dir exists and is writable.
+func isWritableDir(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return false
+	}
+	// Probe writability with a temp file
+	tmp, err := os.CreateTemp(dir, ".write-probe-*")
+	if err != nil {
+		return false
+	}
+	tmp.Close()
+	os.Remove(tmp.Name())
+	return true
 }

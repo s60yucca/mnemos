@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -288,16 +289,21 @@ func TestGetByIDs_ChunkingLargeInput(t *testing.T) {
 	store := newTestDB(t)
 	ctx := context.Background()
 
-	// Create 950 memories — exceeds the 900-ID chunk size
+	// Create 950 memories with UNIQUE content to avoid dedup collisions.
+	// The chunking logic is about SQL parameter limits, not content — but unique
+	// content ensures each memory gets a distinct ID and content hash.
 	const total = 950
 	ids := make([]string, total)
 	for i := 0; i < total; i++ {
-		m := newTestMemoryWithProject("chunking test memory", "proj-chunk")
+		m := newTestMemoryWithProject(
+			fmt.Sprintf("chunking test memory %d with unique content hash seed %d", i, i),
+			"proj-chunk",
+		)
 		require.NoError(t, store.Create(ctx, m))
 		ids[i] = m.ID
 	}
 
 	result, err := store.GetByIDs(ctx, ids)
-	require.NoError(t, err)
+	require.NoError(t, err, "GetByIDs must not fail — chunking should handle >900 IDs transparently")
 	assert.Len(t, result, total, "all %d memories should be returned across chunks", total)
 }

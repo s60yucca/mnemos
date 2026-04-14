@@ -16,11 +16,48 @@ func TestSessionState_PathResolution(t *testing.T) {
 		t.Skip("cannot determine home dir")
 	}
 
+	// Without a project dir, should fall back to ~/.mnemos/sessions
 	got := hook.ResolveSessionDir("", "sessions")
 	want := filepath.Join(home, ".mnemos", "sessions")
 
 	if got != want {
-		t.Errorf("ResolveSessionDir = %q, want %q", got, want)
+		t.Errorf("ResolveSessionDir (no project) = %q, want %q", got, want)
+	}
+}
+
+func TestSessionState_PathResolution_ProjectLocal(t *testing.T) {
+	projectDir := t.TempDir()
+
+	// With a writable project dir, should prefer project-local path
+	got := hook.ResolveSessionDir(projectDir, "sessions")
+	want := filepath.Join(projectDir, ".mnemos", "sessions")
+
+	if got != want {
+		t.Errorf("ResolveSessionDir (project local) = %q, want %q", got, want)
+	}
+}
+
+func TestSessionState_PathResolution_FallbackWhenProjectNotWritable(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home dir")
+	}
+
+	// Non-existent project dir that can't be created (use a file path as parent)
+	tmpFile, err := os.CreateTemp("", "not-a-dir-*")
+	if err != nil {
+		t.Skip("cannot create temp file")
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	// projectDir is a file, not a directory — MkdirAll will fail
+	got := hook.ResolveSessionDir(tmpFile.Name(), "sessions")
+	// Should fall back to global ~/.mnemos/sessions
+	want := filepath.Join(home, ".mnemos", "sessions")
+
+	if got != want {
+		t.Errorf("ResolveSessionDir (unwritable project) = %q, want %q", got, want)
 	}
 }
 
