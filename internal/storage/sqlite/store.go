@@ -404,29 +404,47 @@ func (s *SQLiteStore) GetByIDs(ctx context.Context, ids []string) (map[string]*d
 	if len(ids) == 0 {
 		return map[string]*domain.Memory{}, nil
 	}
-	ph := strings.Repeat("?,", len(ids))
-	ph = ph[:len(ph)-1]
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		args[i] = id
-	}
-	rows, err := s.db.QueryContext(ctx,
-		fmt.Sprintf(`SELECT * FROM memories WHERE id IN (%s) AND status='active'`, ph),
-		args...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make(map[string]*domain.Memory)
-	for rows.Next() {
-		m, err := scanMemory(rows)
+
+	// SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 999.
+	// Chunk large ID slices to stay safely under the limit.
+	const chunkSize = 900
+	result := make(map[string]*domain.Memory, len(ids))
+
+	for i := 0; i < len(ids); i += chunkSize {
+		end := i + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[i:end]
+
+		ph := strings.Repeat("?,", len(chunk))
+		ph = ph[:len(ph)-1]
+		args := make([]any, len(chunk))
+		for j, id := range chunk {
+			args[j] = id
+		}
+		rows, err := s.db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT * FROM memories WHERE id IN (%s) AND status='active'`, ph),
+			args...,
+		)
 		if err != nil {
 			return nil, err
 		}
-		result[m.ID] = m
+		for rows.Next() {
+			m, err := scanMemory(rows)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result[m.ID] = m
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
-	return result, rows.Err()
+
+	return result, nil
 }
 
 func (s *SQLiteStore) Close() error                   { return s.db.Close() }

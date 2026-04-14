@@ -27,6 +27,7 @@ Your AI learns architecture decisions, bug root causes, and project conventions 
 * **Hybrid Search:** Fast local FTS5 keyword search + optional Semantic Vector search (Ollama/OpenAI) using Reciprocal Rank Fusion (RRF).
 * **✨ NEW - Knowledge Synthesis:** Introduces the `mnemos_compile` tool for the AI to distill fragmented memories into comprehensive, long-term architectural documents.
 * **✨ NEW - Intelligent Hooks:** Advanced heuristic prompt filtering (detects technical terms) and session-end memory reminders ensure your agent never misses an important insight.
+* **✨ NEW - Passive Autopilot:** A background daemon that silently analyzes your memory store every 15 minutes — detecting stale compiled articles, auto-linking co-referenced memories, and surfacing findings directly in your next session context. Zero user intervention required.
 
 ---
 
@@ -121,6 +122,7 @@ Just add this JSON snippet to your client's MCP configuration file (e.g., `openc
 | **Smart Deduplication** | ❌ | ❌ | ❌ | **✅ (3-tier)** |
 | **Token-budget Context** | ❌ | partial | ❌ | **✅** |
 | **Works w/ Gemini & Cursor**  | ❌ | ✅ | ✅ | **✅** |
+| **Passive Autopilot** | ❌ | ❌ | ❌ | **✅** |
 
 ---
 
@@ -137,6 +139,42 @@ Just add this JSON snippet to your client's MCP configuration file (e.g., `openc
 | `mnemos_relate` | Link two memories with a typed relation |
 | `mnemos_context` | Assemble relevant memories within a token budget |
 | `mnemos_maintain` | Run decay, archival, and garbage collection |
+
+---
+
+## 🤖 Passive Autopilot
+
+Once `mnemos serve` is running, the autopilot daemon starts automatically in the background. Every 15 minutes (configurable), it:
+
+1. **Detects stale compiled articles** — finds articles whose source memories have been updated since compilation
+2. **Auto-links co-referenced memories** — creates `relates_to` relations between memories that mention the same file paths, Go identifiers, CLI commands, or config keys
+3. **Writes a concise report** — stored as a system memory, surfaced automatically at the start of your next session under "Autopilot Suggestions"
+
+The daemon skips projects with no new activity since the last run (idle skip), so it never wastes cycles.
+
+**CLI commands:**
+
+```bash
+mnemos autopilot status              # show daemon state, last run, next scheduled run
+mnemos autopilot run                 # trigger an immediate run across all projects
+mnemos autopilot run --dry-run       # run detectors without writing anything
+mnemos autopilot run --project myapp # run only for a specific project
+mnemos autopilot report              # print the latest autopilot report
+mnemos autopilot report --project myapp
+```
+
+**Configuration** (`~/.mnemos/config.yaml`):
+
+```yaml
+autopilot:
+  enabled: true
+  interval: 15m
+  initial_delay: 30s
+  max_compiled_per_run: 50
+  max_memories_per_run: 200
+  contradiction_enabled: false   # experimental, off by default
+  contradiction_threshold: 0.3
+```
 
 ---
 

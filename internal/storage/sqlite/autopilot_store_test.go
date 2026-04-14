@@ -281,3 +281,23 @@ func TestListDistinctProjectIDs_EmptyStore(t *testing.T) {
 	assert.NotNil(t, ids)
 	assert.Len(t, ids, 0)
 }
+
+// TestGetByIDs_ChunkingLargeInput verifies that GetByIDs correctly handles more
+// than 900 IDs by chunking queries to stay under SQLite's SQLITE_MAX_VARIABLE_NUMBER.
+func TestGetByIDs_ChunkingLargeInput(t *testing.T) {
+	store := newTestDB(t)
+	ctx := context.Background()
+
+	// Create 950 memories — exceeds the 900-ID chunk size
+	const total = 950
+	ids := make([]string, total)
+	for i := 0; i < total; i++ {
+		m := newTestMemoryWithProject("chunking test memory", "proj-chunk")
+		require.NoError(t, store.Create(ctx, m))
+		ids[i] = m.ID
+	}
+
+	result, err := store.GetByIDs(ctx, ids)
+	require.NoError(t, err)
+	assert.Len(t, result, total, "all %d memories should be returned across chunks", total)
+}

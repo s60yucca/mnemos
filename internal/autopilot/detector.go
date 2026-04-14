@@ -44,8 +44,8 @@ var (
 	reGoIdent = regexp.MustCompile(`\b[A-Z][a-zA-Z0-9]+\.[A-Z][a-zA-Z0-9]+\b`)
 	// CLI commands: mnemos subcommand
 	reCLICmd = regexp.MustCompile(`\bmnemos\s+[\w][\w\-]*\b`)
-	// Config keys: UPPER_SNAKE (3+ chars) or dotted 3-level notation
-	reConfigKey = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}\b|\b\w+\.\w+\.\w+\b`)
+	// Config keys: UPPER_SNAKE (5+ chars to avoid noise like TODO/OK/ID) or dotted 3-level notation
+	reConfigKey = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{4,}\b|\b\w+\.\w+\.\w+\b`)
 )
 
 // ExtractEntities runs all four regex patterns against content and returns a

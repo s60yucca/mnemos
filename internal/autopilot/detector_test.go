@@ -37,6 +37,20 @@ func TestExtractEntities_ConfigKey(t *testing.T) {
 	}
 }
 
+// TestExtractEntities_ConfigKeyNoiseFiltered verifies that short UPPER tokens
+// like TODO, OK, ID, API, URL are not extracted (minimum 5 chars enforced).
+func TestExtractEntities_ConfigKeyNoiseFiltered(t *testing.T) {
+	noisy := []string{"TODO", "OK", "ID", "API", "URL", "GET", "PUT", "EOF"}
+	for _, word := range noisy {
+		entities := ExtractEntities("the " + word + " value")
+		for _, e := range entities {
+			if e == word {
+				t.Errorf("short token %q should not be extracted as a config key entity", word)
+			}
+		}
+	}
+}
+
 func TestExtractEntities_NoMatch(t *testing.T) {
 	entities := ExtractEntities("the project is good")
 	if len(entities) != 0 {
