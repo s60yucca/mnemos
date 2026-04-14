@@ -34,7 +34,7 @@ Get up and running in 30 seconds:
 
 ```bash
 # 1. Install via curl (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/mnemos-dev/mnemos/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/s60yucca/mnemos/main/install.sh | bash
 
 # Or via Homebrew (macOS)
 brew install s60yucca/tap/mnemos
@@ -164,7 +164,7 @@ mnemos serve --rest --port 8080
 ## 🏗️ Build from Source
 
 ```bash
-git clone https://github.com/mnemos-dev/mnemos
+git clone https://github.com/s60yucca/mnemos
 cd mnemos
 make build    # → bin/mnemos
 ```
