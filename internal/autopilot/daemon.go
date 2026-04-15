@@ -65,6 +65,7 @@ func NewAutopilotDaemon(
 			NewStalenessDetector(mnemos, cfg),
 			NewRelationDetector(mnemos, cfg),
 			NewContradictionDetector(mnemos, cfg),
+			NewSummaryBackfillDetector(mnemos, cfg, logger),
 		},
 		writer:  writer,
 		stopCh:  make(chan struct{}),

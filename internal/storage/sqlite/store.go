@@ -520,6 +520,9 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 			args = append(args, t)
 		}
 	}
+	if q.EmptySummary {
+		conditions = append(conditions, "summary = ''")
+	}
 
 	where := ""
 	if len(conditions) > 0 {

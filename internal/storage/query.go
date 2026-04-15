@@ -36,6 +36,7 @@ type ListQuery struct {
 	Cursor            string   // cursor-based pagination
 	ExcludeCategories []string // skip memories with these categories (SQL NOT IN)
 	ExcludeTypes      []string // skip memories with these types (SQL NOT IN)
+	EmptySummary      bool     // when true, adds AND summary = '' to WHERE clause
 }
 
 // TextSearchQuery defines a full-text search request

@@ -121,6 +121,7 @@ func main() {
 	rootCmd.AddCommand(newHookCmd(cfg))
 	rootCmd.AddCommand(newSetupCmd())
 	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
+	rootCmd.AddCommand(newBackfillCmd(mnemos))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)

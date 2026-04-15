@@ -20,6 +20,7 @@ type AutopilotConfig struct {
 	MaxContradictionPairs  int           `mapstructure:"max_contradiction_pairs"`
 	ContradictionEnabled   bool          `mapstructure:"contradiction_enabled"`
 	ContradictionThreshold float64       `mapstructure:"contradiction_threshold"`
+	MaxBackfillPerRun      int           `mapstructure:"max_backfill_per_run"`
 }
 
 // Config holds all application configuration
@@ -172,6 +173,7 @@ func DefaultConfig() *Config {
 			MaxContradictionPairs:  100,
 			ContradictionEnabled:   false,
 			ContradictionThreshold: 0.3,
+			MaxBackfillPerRun:      50,
 		},
 	}
 }
@@ -208,6 +210,7 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	v.SetDefault("hook.prompt_search_limit", cfg.Hook.PromptSearchLimit)
 	v.SetDefault("hook.log_level", cfg.Hook.LogLevel)
 	v.SetDefault("hook.mmr_lambda", cfg.Hook.MMRLambda)
+	v.SetDefault("autopilot.max_backfill_per_run", 50)
 
 	v.SetEnvPrefix("MNEMOS")
 	v.AutomaticEnv()

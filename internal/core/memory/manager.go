@@ -132,6 +132,10 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 		Status:         domain.MemoryStatusActive,
 		ContentHash:    hash,
 	}
+	// Auto-generate summary if caller didn't provide one
+	if req.Summary == "" {
+		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
+	}
 
 	// 6. Persist
 	if err := m.store.Create(ctx, mem); err != nil {
@@ -205,6 +209,8 @@ func (m *Manager) Update(ctx context.Context, req *domain.UpdateRequest) (*domai
 	}
 	if req.Summary != nil {
 		mem.Summary = *req.Summary
+	} else if contentChanged {
+		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
 	}
 	if req.Type != nil {
 		mem.Type = *req.Type
@@ -306,6 +312,10 @@ func (m *Manager) StoreWithoutGate(ctx context.Context, req *domain.StoreRequest
 		QualityScore:   1.0,
 		Status:         domain.MemoryStatusActive,
 		ContentHash:    hash,
+	}
+	// Auto-generate summary if caller didn't provide one
+	if req.Summary == "" {
+		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
 	}
 
 	// 5. Persist
