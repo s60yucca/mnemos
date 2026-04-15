@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	core "github.com/mnemos-dev/mnemos/internal/core"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -17,9 +17,9 @@ var (
 // NewRootCmd creates the root cobra command
 func NewRootCmd(mnemos *core.Mnemos, version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "mnemos",
-		Short: "Mnemos — AI memory engine",
-		Long:  "Mnemos is a unified memory engine for AI coding agents.",
+		Use:     "mnemos",
+		Short:   "Mnemos — AI memory engine",
+		Long:    "Mnemos is a unified memory engine for AI coding agents.",
 		Version: version,
 	}
 
@@ -41,6 +41,8 @@ func NewRootCmd(mnemos *core.Mnemos, version string) *cobra.Command {
 		newInitCmd(),
 		newVersionCmd(version),
 	)
+
+	addBenchmarkCmd(root)
 
 	return root
 }
