@@ -13,7 +13,126 @@ type MnemosMCPEntry struct {
 	Args    []string `json:"args"`
 }
 
-// MergeMCPConfig reads the existing JSON file (if any), merges the Mnemos entry,
+// MergeClaudeSettings reads the existing .claude/settings.json (if any), merges
+// the mnemos hook entries, and writes it back. Idempotent — calling multiple times
+// does not create duplicate hook entries.
+func MergeClaudeSettings(filePath string) error {
+	type hookEntry struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	}
+	type hookGroup struct {
+		Hooks []hookEntry `json:"hooks"`
+	}
+
+	var root map[string]json.RawMessage
+
+	data, err := os.ReadFile(filePath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return err
+		}
+	}
+	if root == nil {
+		root = make(map[string]json.RawMessage)
+	}
+
+	// Get or create the hooks map
+	var hooks map[string]json.RawMessage
+	if raw, ok := root["hooks"]; ok {
+		if err := json.Unmarshal(raw, &hooks); err != nil {
+			return err
+		}
+	}
+	if hooks == nil {
+		hooks = make(map[string]json.RawMessage)
+	}
+
+	// Mnemos hook commands to inject
+	mnemosCmds := map[string]string{
+		"SessionStart":     "mnemos hook session-start",
+		"UserPromptSubmit": "mnemos hook prompt-submit",
+		"SessionEnd":       "mnemos hook session-end",
+	}
+
+	for event, cmd := range mnemosCmds {
+		// Decode existing groups for this event (may be nil)
+		var groups []hookGroup
+		if raw, ok := hooks[event]; ok {
+			if err := json.Unmarshal(raw, &groups); err != nil {
+				return err
+			}
+		}
+
+		// Check if mnemos command already present in any group
+		alreadyPresent := false
+		for _, g := range groups {
+			for _, h := range g.Hooks {
+				if h.Command == cmd {
+					alreadyPresent = true
+					break
+				}
+			}
+			if alreadyPresent {
+				break
+			}
+		}
+
+		if !alreadyPresent {
+			groups = append(groups, hookGroup{
+				Hooks: []hookEntry{{Type: "command", Command: cmd}},
+			})
+		}
+
+		encoded, err := json.Marshal(groups)
+		if err != nil {
+			return err
+		}
+		hooks[event] = json.RawMessage(encoded)
+	}
+
+	// Re-encode hooks back into root
+	hooksBytes, err := json.Marshal(hooks)
+	if err != nil {
+		return err
+	}
+	root["hooks"] = json.RawMessage(hooksBytes)
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+
+	// Atomic write
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".claude-settings-merge-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, filePath); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
 // and writes it back. Idempotent — calling multiple times does not create duplicates.
 func MergeMCPConfig(filePath string, serverName string, entry MnemosMCPEntry) error {
 	// Top-level map: keys are "mcpServers" etc.

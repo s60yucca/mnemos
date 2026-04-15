@@ -53,6 +53,39 @@ func (w *Writer) WriteFile(targetPath, templateContent string) (bool, error) {
 	return true, nil
 }
 
+// MergeMarkdownFile appends templateContent to targetPath if the file does not
+// already contain mergeMarker. If the file does not exist, it is created with
+// templateContent. This is idempotent — running setup multiple times will not
+// duplicate the mnemos section.
+// Returns (appended bool, err error).
+func (w *Writer) MergeMarkdownFile(targetPath, templateContent, mergeMarker string) (bool, error) {
+	existing, err := os.ReadFile(targetPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read %s: %w", targetPath, err)
+	}
+
+	if len(existing) > 0 {
+		// Already contains the mnemos section — skip
+		if strings.Contains(string(existing), mergeMarker) {
+			return false, nil
+		}
+		// Append with a blank line separator
+		merged := strings.TrimRight(string(existing), "\n") + "\n\n" + templateContent
+		if err := w.atomicWrite(targetPath, merged); err != nil {
+			return false, err
+		}
+		w.written = append(w.written, targetPath+" (appended)")
+		return true, nil
+	}
+
+	// File doesn't exist — create it
+	if err := w.atomicWrite(targetPath, templateContent); err != nil {
+		return false, err
+	}
+	w.written = append(w.written, targetPath)
+	return true, nil
+}
+
 // EnsureDir creates a directory if it doesn't exist.
 func (w *Writer) EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o755)

@@ -83,8 +83,18 @@ func runSetup(clientName string, force, global bool) error {
 			return fmt.Errorf("create dir for %s: %w", targetPath, err)
 		}
 
-		if _, err := writer.WriteFile(targetPath, content); err != nil {
-			return fmt.Errorf("write %s: %w", targetPath, err)
+		if fm.MergeMode {
+			if _, err := writer.MergeMarkdownFile(targetPath, content, fm.MergeMarker); err != nil {
+				return fmt.Errorf("merge %s: %w", targetPath, err)
+			}
+		} else if fm.MergeJSON {
+			if err := setup.MergeClaudeSettings(targetPath); err != nil {
+				return fmt.Errorf("merge %s: %w", targetPath, err)
+			}
+		} else {
+			if _, err := writer.WriteFile(targetPath, content); err != nil {
+				return fmt.Errorf("write %s: %w", targetPath, err)
+			}
 		}
 	}
 
@@ -104,7 +114,7 @@ func runSetup(clientName string, force, global bool) error {
 
 	writer.Report()
 	fmt.Printf("MCP config updated: %s\n", mcpTarget)
-	
+
 	if clientName == "gemini-cli" {
 		fmt.Println("✅ Gemini CLI configured. Run `gemini` in this directory to verify mnemos is connected.")
 	}

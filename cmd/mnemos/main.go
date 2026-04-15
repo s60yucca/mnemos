@@ -91,7 +91,7 @@ func main() {
 		coremem.NewQualityGate(cfg.QualityGate),
 	)
 
-	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, logger)
+	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, logger, cfg.Hook.MMRLambda)
 	relManager := relation.NewManager(relStore, memStore, logger)
 
 	decayInterval := cfg.Lifecycle.DecayInterval

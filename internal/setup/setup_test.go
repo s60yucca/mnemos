@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mnemos-dev/mnemos/internal/setup"
@@ -90,7 +91,63 @@ func TestWriter_ConfirmOverwrite(t *testing.T) {
 	})
 }
 
-// TestMergeMCPConfig_NewFile verifies that MergeMCPConfig creates a new file with correct JSON.
+// TestMergeMarkdownFile_NewFile verifies that MergeMarkdownFile creates the file when it doesn't exist.
+func TestMergeMarkdownFile_NewFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "CLAUDE.md")
+
+	w := setup.NewWriter(dir, false, false)
+	appended, err := w.MergeMarkdownFile(target, "# Memory Integration\nmnemos_store", "mnemos_store")
+	require.NoError(t, err)
+	assert.True(t, appended)
+
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "mnemos_store")
+}
+
+// TestMergeMarkdownFile_AppendsWhenMarkerAbsent verifies that existing CLAUDE.md gets the section appended.
+func TestMergeMarkdownFile_AppendsWhenMarkerAbsent(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "CLAUDE.md")
+
+	existing := "# My Project\n\nSome existing content.\n"
+	require.NoError(t, os.WriteFile(target, []byte(existing), 0o644))
+
+	w := setup.NewWriter(dir, false, false)
+	appended, err := w.MergeMarkdownFile(target, "# Memory Integration\nmnemos_store", "mnemos_store")
+	require.NoError(t, err)
+	assert.True(t, appended)
+
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	// Original content preserved
+	assert.Contains(t, string(content), "My Project")
+	assert.Contains(t, string(content), "Some existing content.")
+	// Mnemos section appended
+	assert.Contains(t, string(content), "mnemos_store")
+}
+
+// TestMergeMarkdownFile_IdempotentWhenMarkerPresent verifies that running setup twice doesn't duplicate the section.
+func TestMergeMarkdownFile_IdempotentWhenMarkerPresent(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "CLAUDE.md")
+
+	existing := "# My Project\n\n# Memory Integration\nmnemos_store\n"
+	require.NoError(t, os.WriteFile(target, []byte(existing), 0o644))
+
+	w := setup.NewWriter(dir, false, false)
+	appended, err := w.MergeMarkdownFile(target, "# Memory Integration\nmnemos_store", "mnemos_store")
+	require.NoError(t, err)
+	assert.False(t, appended, "should not append when marker already present")
+
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	// Content unchanged
+	assert.Equal(t, existing, string(content))
+	// Only one occurrence of the marker
+	assert.Equal(t, 1, strings.Count(string(content), "mnemos_store"))
+}
 func TestMergeMCPConfig_NewFile(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, ".mcp.json")
@@ -163,4 +220,62 @@ func TestMergeMCPConfig_ExistingFile(t *testing.T) {
 	assert.Len(t, servers, 2)
 }
 
+// TestMergeClaudeSettings_NewFile verifies that MergeClaudeSettings creates the file when it doesn't exist.
+func TestMergeClaudeSettings_NewFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
 
+	require.NoError(t, setup.MergeClaudeSettings(filePath))
+
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	var root map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &root))
+
+	var hooks map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(root["hooks"], &hooks))
+
+	assert.Contains(t, hooks, "SessionStart")
+	assert.Contains(t, hooks, "UserPromptSubmit")
+	assert.Contains(t, hooks, "SessionEnd")
+}
+
+// TestMergeClaudeSettings_PreservesExistingHooks verifies that existing hooks are not removed.
+func TestMergeClaudeSettings_PreservesExistingHooks(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+
+	existing := `{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "my-existing-hook"}]}]
+  }
+}`
+	require.NoError(t, os.WriteFile(filePath, []byte(existing), 0o644))
+
+	require.NoError(t, setup.MergeClaudeSettings(filePath))
+
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	// Both the existing hook and the mnemos hook should be present
+	assert.Contains(t, string(data), "my-existing-hook")
+	assert.Contains(t, string(data), "mnemos hook session-start")
+}
+
+// TestMergeClaudeSettings_Idempotent verifies that running setup twice doesn't duplicate hooks.
+func TestMergeClaudeSettings_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+
+	require.NoError(t, setup.MergeClaudeSettings(filePath))
+	require.NoError(t, setup.MergeClaudeSettings(filePath))
+
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	// Each mnemos command should appear exactly once
+	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook session-start"))
+	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook prompt-submit"))
+	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook session-end"))
+}

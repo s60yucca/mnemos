@@ -97,6 +97,7 @@ type HookConfig struct {
 	SessionStartMaxTokens    int           `mapstructure:"session_start_max_tokens"`
 	PromptSearchLimit        int           `mapstructure:"prompt_search_limit"`
 	LogLevel                 string        `mapstructure:"log_level"`
+	MMRLambda                float64       `mapstructure:"mmr_lambda"`
 }
 
 // DefaultConfig returns sensible defaults
@@ -140,6 +141,7 @@ func DefaultConfig() *Config {
 			SessionStartMaxTokens:    2000,
 			PromptSearchLimit:        5,
 			LogLevel:                 "warn",
+			MMRLambda:                0.7,
 		},
 		QualityGate: QualityGateConfig{
 			Enabled:            true,
@@ -205,6 +207,7 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	v.SetDefault("hook.session_start_max_tokens", cfg.Hook.SessionStartMaxTokens)
 	v.SetDefault("hook.prompt_search_limit", cfg.Hook.PromptSearchLimit)
 	v.SetDefault("hook.log_level", cfg.Hook.LogLevel)
+	v.SetDefault("hook.mmr_lambda", cfg.Hook.MMRLambda)
 
 	v.SetEnvPrefix("MNEMOS")
 	v.AutomaticEnv()

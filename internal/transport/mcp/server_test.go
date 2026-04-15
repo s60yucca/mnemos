@@ -64,7 +64,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, *sqlitestore.EmbeddingS
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
-	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger)
+	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7)
 	relManager := relation.NewManager(relStore, memStore, logger)
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
 	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
@@ -244,7 +244,7 @@ func newTestServerWithGate(t *testing.T) *Server {
 	gate := coremem.NewQualityGate(cfg)
 
 	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, gate)
-	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger)
+	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7)
 	relManager := relation.NewManager(relStore, memStore, logger)
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
 	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)

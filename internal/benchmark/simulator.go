@@ -42,7 +42,7 @@ func NewSessionSimulator() (*SessionSimulator, error) {
 	noop := embedding.NewNoopProvider(384)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	engine := search.NewSearchEngine(fts, embedStore, noop, relations, logger)
+	engine := search.NewSearchEngine(fts, embedStore, noop, relations, logger, 0.7)
 
 	return &SessionSimulator{
 		db:     db,

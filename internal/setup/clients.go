@@ -5,6 +5,9 @@ type FileMapping struct {
 	TemplatePath string // e.g. "templates/claude/CLAUDE.md"
 	LocalPath    string // relative to project dir, e.g. "CLAUDE.md"
 	GlobalPath   string // relative to home dir, e.g. "CLAUDE.md"
+	MergeMode    bool   // if true, append template content to existing file instead of overwriting
+	MergeMarker  string // sentinel string; if file already contains this, skip append (idempotent)
+	MergeJSON    bool   // if true, use JSON-aware merge (for settings.json)
 }
 
 // MCPMapping defines the MCP config file paths.
@@ -29,11 +32,14 @@ var Clients = map[string]ClientConfig{
 				TemplatePath: "templates/claude/CLAUDE.md",
 				LocalPath:    "CLAUDE.md",
 				GlobalPath:   "CLAUDE.md",
+				MergeMode:    true,
+				MergeMarker:  "mnemos_store",
 			},
 			{
 				TemplatePath: "templates/claude/settings.json",
 				LocalPath:    ".claude/settings.json",
 				GlobalPath:   ".claude/settings.json",
+				MergeJSON:    true,
 			},
 		},
 		MCPConfig: MCPMapping{
@@ -48,6 +54,8 @@ var Clients = map[string]ClientConfig{
 				TemplatePath: "templates/kiro/steering/mnemos.md",
 				LocalPath:    ".kiro/steering/mnemos.md",
 				GlobalPath:   ".kiro/steering/mnemos.md",
+				MergeMode:    true,
+				MergeMarker:  "mnemos_store",
 			},
 		},
 		MCPConfig: MCPMapping{
@@ -62,6 +70,8 @@ var Clients = map[string]ClientConfig{
 				TemplatePath: "templates/cursor/.cursorrules",
 				LocalPath:    ".cursorrules",
 				GlobalPath:   ".cursorrules",
+				MergeMode:    true,
+				MergeMarker:  "mnemos_context",
 			},
 		},
 		MCPConfig: MCPMapping{
@@ -75,7 +85,9 @@ var Clients = map[string]ClientConfig{
 			{
 				TemplatePath: "templates/gemini-cli/GEMINI.md",
 				LocalPath:    "GEMINI.md",
-				GlobalPath:   "GEMINI.md", // Same as local, since gemini-cli may read local first. The prompt doesn't specify global path, but GEMINI.md in cwd is fine
+				GlobalPath:   "GEMINI.md",
+				MergeMode:    true,
+				MergeMarker:  "mnemos_store",
 			},
 		},
 		MCPConfig: MCPMapping{
