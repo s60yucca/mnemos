@@ -240,6 +240,71 @@ Benchmarked on macOS (Apple Silicon), SQLite WAL mode, cold process start per op
 
 ---
 
+## 📊 Retrieval Quality Benchmarks
+
+mnemos ships with a built-in benchmark suite that measures retrieval quality across five simulation scenarios — no LLM calls, no external services, fully reproducible.
+
+Run it yourself:
+
+```bash
+go build -tags benchmark -o mnemos-bench ./cmd/mnemos
+./mnemos-bench benchmark run
+```
+
+Results on the built-in scenarios (FTS5 only, `embedding.NoopProvider`):
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  mnemos Retrieval Quality Benchmark                                  │
+│                                                                      │
+│  Precision@K and F1 across session scenarios                         │
+│                                                                      │
+│  cold-start-to-warm (20 sessions)                                    │
+│  F1:  0.37 (steady @s1)                                              │
+│  P:   0.37  R: 0.37                                                  │
+│  Eff: 6% of store                                                    │
+│                                                                      │
+│  mistake-prevention (5 sessions)                                     │
+│  F1:  0.00 (steady @s1)                                              │
+│  P:   0.00  R: 0.00                                                  │
+│  Eff: 0% of store                                                    │
+│  MPR: 100%                                                           │
+│                                                                      │
+│  context-precision (10 sessions)                                     │
+│  F1:  0.00 (steady @s1)                                              │
+│  P:   0.00  R: 0.00                                                  │
+│  Eff: 0% of store                                                    │
+│                                                                      │
+│  cross-session-transfer (10 sessions)                                │
+│  F1:  0.20 (steady @s1)                                              │
+│  P:   0.30  R: 0.15                                                  │
+│  Eff: 11% of store                                                   │
+│                                                                      │
+│  correction-supersedes (10 sessions)                                 │
+│  F1:  0.20 (steady @s1)                                              │
+│  P:   0.30  R: 0.15                                                  │
+│  Eff: 11% of store                                                   │
+│  MPR: 100%                                                           │
+│  CorrRate: 30%                                                       │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**What the metrics mean:**
+- `F1` — harmonic mean of precision and recall (higher = better retrieval)
+- `P / R` — precision and recall against declared ground-truth memory IDs
+- `Eff` — fraction of total store tokens selected (lower = more selective)
+- `MPR` — Mistake Prevention Rate: fraction of known-wrong memories kept out of context
+- `CorrRate` — fraction of tasks where corrective memories ranked above the gotcha they supersede
+
+Save results as JSON for later comparison:
+
+```bash
+./mnemos-bench benchmark run --output results.json
+./mnemos-bench benchmark report --input results.json
+```
+
+---
+
 ## 🌐 REST API
 
 Need to connect Mnemos to something else? Run it as a REST API:
