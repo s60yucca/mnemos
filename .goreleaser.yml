@@ -48,6 +48,8 @@ release:
 
 homebrew_casks:
   - name: mnemos
+    binaries:
+      - mnemos
     repository:
       owner: s60yucca
       name: homebrew-tap
