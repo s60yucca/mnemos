@@ -64,9 +64,13 @@ func runHook(cfg *config.Config, hookType string) {
 	// Build Mnemos with InitLight (no background workers, no embedding health-check)
 	mnemos, cleanup, err := buildLightMnemos(cfg)
 	if err != nil {
-		// If we can't build Mnemos, write a graceful "skipped" response instead of "error".
-		// This prevents confusing error messages when mnemos is not yet configured.
-		writeSkippedJSON(hookType, "mnemos unavailable")
+		// Log the error for debugging but don't show it to users
+		// The database should auto-create and migrate, so errors here are unexpected
+		logger := hook.NewHookLogger("", cfg.Hook.LogLevel)
+		logger.Warn("hook initialization failed", "hook", hookType, "error", err.Error())
+
+		// Return skipped status - the hook will work once mnemos is properly set up
+		writeSkippedJSON(hookType, "mnemos initialization failed")
 		return
 	}
 	defer cleanup()
