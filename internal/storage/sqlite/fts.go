@@ -159,7 +159,7 @@ func scanFTSRow(rows *sql.Rows) (*domain.Memory, float64, string, error) {
 		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
 		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
 		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &m.QualityScore, &mStatus, &m.ContentHash,
+		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash, &m.QualityScore,
 		&score, &snippet,
 	)
 	if err != nil {

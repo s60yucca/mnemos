@@ -558,7 +558,9 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 // quality_score at the end of existing DBs, shifting the column order vs. the base schema).
 // This constant ensures scanMemory always receives columns in the expected order regardless
 // of how the DB was originally created.
-const selectMemories = `SELECT id, content, summary, type, category, tags, source, project_id, agent, session_id, metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, quality_score, status, content_hash FROM memories`
+// IMPORTANT: Column order matches migrated databases (v1→v2), not the base schema, because
+// ALTER TABLE adds columns at the end. Most users have migrated databases.
+const selectMemories = `SELECT id, content, summary, type, category, tags, source, project_id, agent, session_id, metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, status, content_hash, quality_score FROM memories`
 
 type scanner interface {
 	Scan(dest ...any) error
@@ -574,7 +576,7 @@ func scanMemory(row scanner) (*domain.Memory, error) {
 		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
 		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
 		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &m.QualityScore, &mStatus, &m.ContentHash,
+		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash, &m.QualityScore,
 	)
 	if err != nil {
 		return nil, err
