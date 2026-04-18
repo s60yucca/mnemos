@@ -67,7 +67,7 @@ func (f *FTSSearcher) Search(ctx context.Context, q storage.TextSearchQuery) ([]
 		SELECT m.id, m.content, m.summary, m.type, m.category,
 		       m.tags, m.source, m.project_id, m.agent, m.session_id,
 		       m.metadata, m.created_at, m.updated_at, m.last_accessed_at,
-		       m.access_count, m.relevance_score, m.status, m.content_hash,
+		       m.access_count, m.relevance_score, m.quality_score, m.status, m.content_hash,
 		       bm25(memories_fts) as score,
 		       snippet(memories_fts, 1, '<b>', '</b>', '...', 32) as snippet
 		FROM memories_fts
@@ -159,7 +159,7 @@ func scanFTSRow(rows *sql.Rows) (*domain.Memory, float64, string, error) {
 		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
 		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
 		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash,
+		&m.AccessCount, &m.RelevanceScore, &m.QualityScore, &mStatus, &m.ContentHash,
 		&score, &snippet,
 	)
 	if err != nil {
@@ -171,7 +171,7 @@ func scanFTSRow(rows *sql.Rows) (*domain.Memory, float64, string, error) {
 	m.CreatedAt = util.UnixNanoToTime(createdAt)
 	m.UpdatedAt = util.UnixNanoToTime(updatedAt)
 	m.LastAccessedAt = util.UnixNanoToTime(lastAccessedAt)
-	json.Unmarshal([]byte(tagsJSON), &m.Tags)    //nolint:errcheck
+	json.Unmarshal([]byte(tagsJSON), &m.Tags)     //nolint:errcheck
 	json.Unmarshal([]byte(metaJSON), &m.Metadata) //nolint:errcheck
 
 	return &m, score, snippet, nil
