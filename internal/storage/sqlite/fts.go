@@ -67,7 +67,7 @@ func (f *FTSSearcher) Search(ctx context.Context, q storage.TextSearchQuery) ([]
 		SELECT m.id, m.content, m.summary, m.type, m.category,
 		       m.tags, m.source, m.project_id, m.agent, m.session_id,
 		       m.metadata, m.created_at, m.updated_at, m.last_accessed_at,
-		       m.access_count, m.relevance_score, m.quality_score, m.status, m.content_hash,
+		       m.access_count, m.relevance_score, m.status, m.content_hash, m.quality_score,
 		       bm25(memories_fts) as score,
 		       snippet(memories_fts, 1, '<b>', '</b>', '...', 32) as snippet
 		FROM memories_fts
