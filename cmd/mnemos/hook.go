@@ -64,9 +64,9 @@ func runHook(cfg *config.Config, hookType string) {
 	// Build Mnemos with InitLight (no background workers, no embedding health-check)
 	mnemos, cleanup, err := buildLightMnemos(cfg)
 	if err != nil {
-		// Even if we can't build Mnemos, we must write valid JSON to stdout.
-		// The dispatcher handles nil mnemos gracefully via the hook logger.
-		writeErrorJSON(hookType, err.Error())
+		// If we can't build Mnemos, write a graceful "skipped" response instead of "error".
+		// This prevents confusing error messages when mnemos is not yet configured.
+		writeSkippedJSON(hookType, "mnemos unavailable")
 		return
 	}
 	defer cleanup()
@@ -149,5 +149,12 @@ func buildLightMnemos(cfg *config.Config) (*core.Mnemos, func(), error) {
 // Used as last-resort when Mnemos initialization fails.
 func writeErrorJSON(hookType, msg string) {
 	fmt.Fprintf(os.Stdout, `{"status":"error","message":%q}`+"\n", msg)
+	_ = hookType // reserved for future structured logging
+}
+
+// writeSkippedJSON writes a minimal skipped HookOutput JSON to stdout.
+// Used when Mnemos is not available but the hook should not show an error.
+func writeSkippedJSON(hookType, msg string) {
+	fmt.Fprintf(os.Stdout, `{"status":"skipped","message":%q}`+"\n", msg)
 	_ = hookType // reserved for future structured logging
 }
