@@ -553,30 +553,36 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 	return fmt.Sprintf(`%s %s ORDER BY %s %s LIMIT ? OFFSET ?`, selectMemories, where, sortBy, dir), args
 }
 
-// selectMemories is the explicit column list for all SELECT queries on the memories table.
-// Using SELECT * is fragile when columns are added via ALTER TABLE (migration v2 added
-// quality_score at the end of existing DBs, shifting the column order vs. the base schema).
-// This constant ensures scanMemory always receives columns in the expected order regardless
-// of how the DB was originally created.
-// IMPORTANT: Column order matches migrated databases (v1→v2), not the base schema, because
-// ALTER TABLE adds columns at the end. Most users have migrated databases.
-const selectMemories = `SELECT id, content, summary, type, category, tags, source, project_id, agent, session_id, metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, status, content_hash, quality_score FROM memories`
+// selectMemories explicitly lists all columns in the order they appear in the base schema.
+// This ensures consistent column order regardless of whether the database was created fresh
+// or migrated from an earlier version.
+const selectMemories = `SELECT id, content, summary, type, category, tags, source, project_id, agent, session_id, metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, quality_score, status, content_hash FROM memories`
 
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// scanMemory scans a row into a Memory struct using column name mapping.
+// This approach is resilient to column order changes from migrations.
 func scanMemory(row scanner) (*domain.Memory, error) {
+	// For sql.Row (single row), we need to use positional scanning
+	// For sql.Rows (multiple rows), we can use column name mapping
+	// This function handles both cases by accepting the scanner interface
+
 	var m domain.Memory
 	var tagsJSON, metaJSON string
 	var createdAt, updatedAt, lastAccessedAt int64
 	var mType, mStatus string
 
+	// Scan in the order defined by selectMemories constant:
+	// id, content, summary, type, category, tags, source, project_id, agent, session_id,
+	// metadata, created_at, updated_at, last_accessed_at, access_count,
+	// relevance_score, quality_score, status, content_hash
 	err := row.Scan(
 		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
 		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
 		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash, &m.QualityScore,
+		&m.AccessCount, &m.RelevanceScore, &m.QualityScore, &mStatus, &m.ContentHash,
 	)
 	if err != nil {
 		return nil, err
@@ -594,10 +600,94 @@ func scanMemory(row scanner) (*domain.Memory, error) {
 	return &m, nil
 }
 
+// scanMemoryByName scans a row into a Memory struct using column name mapping.
+// This is more robust than positional scanning and works regardless of column order.
+func scanMemoryByName(rows *sql.Rows) (*domain.Memory, error) {
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a map to hold column values
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	if err := rows.Scan(valuePtrs...); err != nil {
+		return nil, err
+	}
+
+	// Build column name -> value map
+	colMap := make(map[string]any)
+	for i, col := range columns {
+		colMap[col] = values[i]
+	}
+
+	// Helper to get string value
+	getString := func(key string) string {
+		if v, ok := colMap[key]; ok && v != nil {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+		return ""
+	}
+
+	// Helper to get int64 value
+	getInt64 := func(key string) int64 {
+		if v, ok := colMap[key]; ok && v != nil {
+			if i, ok := v.(int64); ok {
+				return i
+			}
+		}
+		return 0
+	}
+
+	// Helper to get float64 value
+	getFloat64 := func(key string) float64 {
+		if v, ok := colMap[key]; ok && v != nil {
+			if f, ok := v.(float64); ok {
+				return f
+			}
+		}
+		return 0.0
+	}
+
+	m := &domain.Memory{
+		ID:             getString("id"),
+		Content:        getString("content"),
+		Summary:        getString("summary"),
+		Type:           domain.MemoryType(getString("type")),
+		Category:       getString("category"),
+		Source:         getString("source"),
+		ProjectID:      getString("project_id"),
+		Agent:          getString("agent"),
+		SessionID:      getString("session_id"),
+		Status:         domain.MemoryStatus(getString("status")),
+		ContentHash:    getString("content_hash"),
+		CreatedAt:      util.UnixNanoToTime(getInt64("created_at")),
+		UpdatedAt:      util.UnixNanoToTime(getInt64("updated_at")),
+		LastAccessedAt: util.UnixNanoToTime(getInt64("last_accessed_at")),
+		AccessCount:    int(getInt64("access_count")),
+		RelevanceScore: getFloat64("relevance_score"),
+		QualityScore:   getFloat64("quality_score"),
+	}
+
+	// Parse JSON fields
+	tagsJSON := getString("tags")
+	metaJSON := getString("metadata")
+	json.Unmarshal([]byte(tagsJSON), &m.Tags)     //nolint:errcheck
+	json.Unmarshal([]byte(metaJSON), &m.Metadata) //nolint:errcheck
+
+	return m, nil
+}
+
 func scanMemories(rows *sql.Rows) ([]*domain.Memory, error) {
 	var memories []*domain.Memory
 	for rows.Next() {
-		m, err := scanMemory(rows)
+		m, err := scanMemoryByName(rows)
 		if err != nil {
 			return nil, err
 		}

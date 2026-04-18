@@ -67,7 +67,7 @@ func (f *FTSSearcher) Search(ctx context.Context, q storage.TextSearchQuery) ([]
 		SELECT m.id, m.content, m.summary, m.type, m.category,
 		       m.tags, m.source, m.project_id, m.agent, m.session_id,
 		       m.metadata, m.created_at, m.updated_at, m.last_accessed_at,
-		       m.access_count, m.relevance_score, m.status, m.content_hash, m.quality_score,
+		       m.access_count, m.relevance_score, m.quality_score, m.status, m.content_hash,
 		       bm25(memories_fts) as score,
 		       snippet(memories_fts, 1, '<b>', '</b>', '...', 32) as snippet
 		FROM memories_fts
@@ -148,31 +148,86 @@ func sanitizeFTSQuery(q string) string {
 }
 
 func scanFTSRow(rows *sql.Rows) (*domain.Memory, float64, string, error) {
-	var m domain.Memory
-	var tagsJSON, metaJSON string
-	var createdAt, updatedAt, lastAccessedAt int64
-	var mType, mStatus string
-	var score float64
-	var snippet string
-
-	err := rows.Scan(
-		&m.ID, &m.Content, &m.Summary, &mType, &m.Category,
-		&tagsJSON, &m.Source, &m.ProjectID, &m.Agent, &m.SessionID,
-		&metaJSON, &createdAt, &updatedAt, &lastAccessedAt,
-		&m.AccessCount, &m.RelevanceScore, &mStatus, &m.ContentHash, &m.QualityScore,
-		&score, &snippet,
-	)
+	columns, err := rows.Columns()
 	if err != nil {
 		return nil, 0, "", err
 	}
 
-	m.Type = domain.MemoryType(mType)
-	m.Status = domain.MemoryStatus(mStatus)
-	m.CreatedAt = util.UnixNanoToTime(createdAt)
-	m.UpdatedAt = util.UnixNanoToTime(updatedAt)
-	m.LastAccessedAt = util.UnixNanoToTime(lastAccessedAt)
+	// Create a map to hold column values
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	if err := rows.Scan(valuePtrs...); err != nil {
+		return nil, 0, "", err
+	}
+
+	// Build column name -> value map
+	colMap := make(map[string]any)
+	for i, col := range columns {
+		colMap[col] = values[i]
+	}
+
+	// Helper to get string value
+	getString := func(key string) string {
+		if v, ok := colMap[key]; ok && v != nil {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+		return ""
+	}
+
+	// Helper to get int64 value
+	getInt64 := func(key string) int64 {
+		if v, ok := colMap[key]; ok && v != nil {
+			if i, ok := v.(int64); ok {
+				return i
+			}
+		}
+		return 0
+	}
+
+	// Helper to get float64 value
+	getFloat64 := func(key string) float64 {
+		if v, ok := colMap[key]; ok && v != nil {
+			if f, ok := v.(float64); ok {
+				return f
+			}
+		}
+		return 0.0
+	}
+
+	m := &domain.Memory{
+		ID:             getString("id"),
+		Content:        getString("content"),
+		Summary:        getString("summary"),
+		Type:           domain.MemoryType(getString("type")),
+		Category:       getString("category"),
+		Source:         getString("source"),
+		ProjectID:      getString("project_id"),
+		Agent:          getString("agent"),
+		SessionID:      getString("session_id"),
+		Status:         domain.MemoryStatus(getString("status")),
+		ContentHash:    getString("content_hash"),
+		CreatedAt:      util.UnixNanoToTime(getInt64("created_at")),
+		UpdatedAt:      util.UnixNanoToTime(getInt64("updated_at")),
+		LastAccessedAt: util.UnixNanoToTime(getInt64("last_accessed_at")),
+		AccessCount:    int(getInt64("access_count")),
+		RelevanceScore: getFloat64("relevance_score"),
+		QualityScore:   getFloat64("quality_score"),
+	}
+
+	// Parse JSON fields
+	tagsJSON := getString("tags")
+	metaJSON := getString("metadata")
 	json.Unmarshal([]byte(tagsJSON), &m.Tags)     //nolint:errcheck
 	json.Unmarshal([]byte(metaJSON), &m.Metadata) //nolint:errcheck
 
-	return &m, score, snippet, nil
+	score := getFloat64("score")
+	snippet := getString("snippet")
+
+	return m, score, snippet, nil
 }
