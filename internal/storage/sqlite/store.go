@@ -49,7 +49,7 @@ func (s *SQLiteStore) Create(ctx context.Context, m *domain.Memory) error {
 }
 
 func (s *SQLiteStore) GetByID(ctx context.Context, id string) (*domain.Memory, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT * FROM memories WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, selectMemories+` WHERE id = ?`, id)
 	m, err := scanMemory(row)
 	if err == sql.ErrNoRows {
 		return nil, &domain.NotFoundError{ID: id}
@@ -58,7 +58,7 @@ func (s *SQLiteStore) GetByID(ctx context.Context, id string) (*domain.Memory, e
 }
 
 func (s *SQLiteStore) GetByHash(ctx context.Context, hash string) (*domain.Memory, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT * FROM memories WHERE content_hash = ? AND status = 'active'`, hash)
+	row := s.db.QueryRowContext(ctx, selectMemories+` WHERE content_hash = ? AND status = 'active'`, hash)
 	m, err := scanMemory(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -215,7 +215,7 @@ func (s *SQLiteStore) ListForLifecycle(ctx context.Context, q storage.LifecycleQ
 	args = append(args, limit)
 
 	rows, err := s.db.QueryContext(ctx,
-		fmt.Sprintf(`SELECT * FROM memories %s ORDER BY relevance_score ASC LIMIT ?`, where),
+		fmt.Sprintf(`%s %s ORDER BY relevance_score ASC LIMIT ?`, selectMemories, where),
 		args...,
 	)
 	if err != nil {
@@ -300,7 +300,7 @@ func (s *SQLiteStore) CountMemoriesSince(ctx context.Context, projectID string, 
 
 func (s *SQLiteStore) GetRecentMemories(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT * FROM memories WHERE status='active' AND project_id=? ORDER BY created_at DESC LIMIT ?`,
+		selectMemories+` WHERE status='active' AND project_id=? ORDER BY created_at DESC LIMIT ?`,
 		projectID, limit,
 	)
 	if err != nil {
@@ -312,7 +312,7 @@ func (s *SQLiteStore) GetRecentMemories(ctx context.Context, projectID string, l
 
 func (s *SQLiteStore) GetLastSessionSummary(ctx context.Context, projectID string) (*domain.Memory, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT * FROM memories WHERE status='active' AND project_id=? AND (category='session' OR tags LIKE '%auto-breadcrumb%') ORDER BY created_at DESC LIMIT 1`,
+		selectMemories+` WHERE status='active' AND project_id=? AND (category='session' OR tags LIKE '%auto-breadcrumb%') ORDER BY created_at DESC LIMIT 1`,
 		projectID,
 	)
 	m, err := scanMemory(row)
@@ -324,7 +324,7 @@ func (s *SQLiteStore) GetLastSessionSummary(ctx context.Context, projectID strin
 
 func (s *SQLiteStore) GetCompiledArticles(ctx context.Context, projectID string, limit int) ([]*domain.Memory, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT * FROM memories WHERE status='active' AND project_id=? AND type='compiled' ORDER BY relevance_score DESC LIMIT ?`,
+		selectMemories+` WHERE status='active' AND project_id=? AND type='compiled' ORDER BY relevance_score DESC LIMIT ?`,
 		projectID, limit,
 	)
 	if err != nil {
@@ -353,7 +353,7 @@ func (s *SQLiteStore) ReduceRelevance(ctx context.Context, id string, delta floa
 
 func (s *SQLiteStore) GetLatestAutopilotReport(ctx context.Context, projectID string) (*domain.Memory, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT * FROM memories WHERE category='autopilot' AND project_id=? AND status='active' ORDER BY created_at DESC LIMIT 1`,
+		selectMemories+` WHERE category='autopilot' AND project_id=? AND status='active' ORDER BY created_at DESC LIMIT 1`,
 		projectID,
 	)
 	m, err := scanMemory(row)
@@ -424,7 +424,7 @@ func (s *SQLiteStore) GetByIDs(ctx context.Context, ids []string) (map[string]*d
 			args[j] = id
 		}
 		rows, err := s.db.QueryContext(ctx,
-			fmt.Sprintf(`SELECT * FROM memories WHERE id IN (%s) AND status='active'`, ph),
+			fmt.Sprintf(`%s WHERE id IN (%s) AND status='active'`, selectMemories, ph),
 			args...,
 		)
 		if err != nil {
@@ -550,8 +550,15 @@ func buildListQuery(q storage.ListQuery, count bool) (string, []any) {
 		limit = 50
 	}
 	args = append(args, limit, q.Offset)
-	return fmt.Sprintf(`SELECT * FROM memories %s ORDER BY %s %s LIMIT ? OFFSET ?`, where, sortBy, dir), args
+	return fmt.Sprintf(`%s %s ORDER BY %s %s LIMIT ? OFFSET ?`, selectMemories, where, sortBy, dir), args
 }
+
+// selectMemories is the explicit column list for all SELECT queries on the memories table.
+// Using SELECT * is fragile when columns are added via ALTER TABLE (migration v2 added
+// quality_score at the end of existing DBs, shifting the column order vs. the base schema).
+// This constant ensures scanMemory always receives columns in the expected order regardless
+// of how the DB was originally created.
+const selectMemories = `SELECT id, content, summary, type, category, tags, source, project_id, agent, session_id, metadata, created_at, updated_at, last_accessed_at, access_count, relevance_score, quality_score, status, content_hash FROM memories`
 
 type scanner interface {
 	Scan(dest ...any) error
