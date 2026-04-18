@@ -82,11 +82,8 @@ func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*Ho
 	// 6. CLEANUP STATE
 	_ = stateManager.Delete(sessionID)
 
-	// 7. BUILD REMINDER (tier based on memories stored)
-	reminder := sessionEndReminder(count)
-
-	// 8. RETURN
-	out := &HookOutput{
+	// 7. RETURN (SessionEnd hooks don't support context injection in Claude Code)
+	return &HookOutput{
 		Status:  "ok",
 		Message: fmt.Sprintf("session ended, %d memories", count),
 		Metadata: map[string]any{
@@ -94,13 +91,5 @@ func handleSessionEnd(ctx context.Context, d *Dispatcher, input *HookInput) (*Ho
 			"searches_performed": len(state.RecentSearches),
 			"session_duration":   time.Since(state.StartedAt).String(),
 		},
-	}
-	if reminder != "" {
-		out.HookSpecificOutput = &HookSpecificOutput{
-			HookEventName:     "SessionEnd",
-			AdditionalContext: reminder,
-		}
-		out.ContextInjection = reminder
-	}
-	return out, nil
+	}, nil
 }
