@@ -48,11 +48,9 @@ You don't call any of this. Your agent doesn't call any of this. Hooks fire it a
 
 **Layer 1 — MCP transport.** Standard MCP server, stdio, works with any MCP client.
 
-**Layer 2 — Autopilot.** One command (`mnemos setup claude`) wires hooks + steering + MCP config. Session start auto-injects relevant context. Prompt submit auto-searches on topic change. Session end verifies coverage.
+**Layer 2 — Autopilot hooks.** One command (`mnemos setup claude`) wires hooks + steering + MCP config. Session start auto-injects relevant context. Prompt submit auto-searches on topic change. Session end verifies coverage.
 
-**Layer 3 — Auto-compiled knowledge base.** Quality gate, 3-tier dedup, auto-summarization, file linking, MMR context assembly — all automatic. You never trigger them.
-
-**Layer 4 — Passive autopilot daemon.** Background worker that continuously detects staleness, contradiction, and missing relations across your memory base — without any user action.
+**Layer 3 — Auto-compiled knowledge base.** Quality gate, 3-tier dedup, auto-summarization, file linking, MMR context assembly — all automatic. You never trigger them. Includes passive background daemon that continuously detects staleness, contradiction, and missing relations across your memory base.
 
 ---
 
@@ -82,8 +80,11 @@ Mnemos isn't trying to be Zep — different bet. Zep is the best answer if you n
 # Homebrew (macOS / Linux)
 brew install s60yucca/tap/mnemos && mnemos setup claude
 
-# curl
+# curl (verify mnemos.dev is live before using)
 curl -fsSL https://mnemos.dev/install.sh | bash && mnemos setup claude
+
+# npm (coming in v1.2)
+# npx mnemos setup claude
 
 # Build from source (requires Go 1.23+)
 git clone https://github.com/s60yucca/mnemos
@@ -146,9 +147,11 @@ mnemos autopilot report          # view latest findings
 | hook session-start (cold) | < 200 ms | — |
 | binary size | ~12 MB | — |
 
+*Hardware: M1 Pro, 16GB RAM, SQLite on SSD. Your latency may vary.*
+
 Most operations stay under 60 ms regardless of dataset size. Hook subcommands use `InitLight` mode — no background workers, no session interrupt.
 
-Value benchmark (token savings) is in progress. See [DOGFOODING_RUNBOOK.md](docs/benchmarks/DOGFOODING_RUNBOOK.md) for methodology. Real numbers will replace this section once dogfooding completes.
+**Value benchmark (token savings, precision, gotcha avoidance) is in progress.** See [DOGFOODING_RUNBOOK.md](docs/benchmarks/DOGFOODING_RUNBOOK.md) for methodology. Real numbers will replace this placeholder before public launch.
 
 ---
 
