@@ -42,9 +42,10 @@ type HookSpecificOutput struct {
 
 // SessionStartPayload is the payload for the session-start hook.
 type SessionStartPayload struct {
-	TaskDescription string `json:"task_description,omitempty"`
-	InitialPrompt   string `json:"initial_prompt,omitempty"`
-	WorkingDir      string `json:"working_dir,omitempty"`
+	TaskDescription string   `json:"task_description,omitempty"`
+	InitialPrompt   string   `json:"initial_prompt,omitempty"`
+	WorkingDir      string   `json:"working_dir,omitempty"`
+	OpenFiles       []string `json:"open_files,omitempty"`
 }
 
 // PromptSubmitPayload is the payload for the prompt-submit hook.

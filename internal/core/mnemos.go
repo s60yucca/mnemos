@@ -199,8 +199,8 @@ func (m *Mnemos) Traverse(ctx context.Context, q domain.GraphQuery) (*domain.Gra
 }
 
 // AssembleContext builds a context bundle for a query
-func (m *Mnemos) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool) (*search.ContextResult, error) {
-	return m.searchEngine.AssembleContext(ctx, query, projectID, maxTokens, includeRelations)
+func (m *Mnemos) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool, openFiles []string) (*search.ContextResult, error) {
+	return m.searchEngine.AssembleContext(ctx, query, projectID, maxTokens, includeRelations, openFiles)
 }
 
 // Maintain runs decay, archival, and GC

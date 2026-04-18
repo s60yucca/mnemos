@@ -89,7 +89,7 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	var querySource string
 
 	if quality == QuerySpecific {
-		result, err := d.mnemos.AssembleContext(ctx, query, state.ProjectID, d.cfg.SessionStartMaxTokens, false)
+		result, err := d.mnemos.AssembleContext(ctx, query, state.ProjectID, d.cfg.SessionStartMaxTokens, false, payload.OpenFiles)
 		if err != nil {
 			slog.Warn("session_start: context assembly failed", "err", err)
 			return &HookOutput{

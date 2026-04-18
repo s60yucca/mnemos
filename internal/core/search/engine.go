@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
+	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/embedding"
 	"github.com/mnemos-dev/mnemos/internal/storage"
@@ -25,6 +26,7 @@ type SearchEngine struct {
 	relations  storage.IRelationStore
 	logger     *slog.Logger
 	assembler  *ContextAssembler
+	fileBoost  float64
 }
 
 func NewSearchEngine(
@@ -34,6 +36,7 @@ func NewSearchEngine(
 	relations storage.IRelationStore,
 	logger *slog.Logger,
 	lambda float64,
+	fileBoost float64,
 ) *SearchEngine {
 	return &SearchEngine{
 		fts:        fts,
@@ -42,6 +45,7 @@ func NewSearchEngine(
 		relations:  relations,
 		logger:     logger,
 		assembler:  NewContextAssembler(lambda),
+		fileBoost:  fileBoost,
 	}
 }
 
@@ -119,7 +123,7 @@ func (e *SearchEngine) HybridSearch(ctx context.Context, query, projectID string
 //  1. Candidate retrieval via HybridSearch (up to 20 results)
 //  2. MMR diversity filter — balances relevance vs. redundancy
 //  3. Adaptive packing — chooses full/summary/one-line detail level by budget
-func (e *SearchEngine) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool) (*ContextResult, error) {
+func (e *SearchEngine) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool, openFiles []string) (*ContextResult, error) {
 	candidates, err := e.HybridSearch(ctx, query, projectID, 20)
 	if err != nil {
 		return nil, err
@@ -138,6 +142,11 @@ func (e *SearchEngine) AssembleContext(ctx context.Context, query, projectID str
 		}
 		mem.RelevanceScore = score
 		memories[i] = mem
+	}
+
+	// Apply file-aware boost (no-op when openFiles is nil/empty)
+	if len(openFiles) > 0 {
+		coremem.ApplyFileBoost(memories, openFiles, e.fileBoost)
 	}
 
 	// Stage 2: MMR diversity filter

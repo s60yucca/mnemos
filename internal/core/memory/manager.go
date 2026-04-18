@@ -137,6 +137,14 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
 	}
 
+	// Extract and store related file paths for file-aware retrieval boost
+	if encoded := extractRelatedFiles(mem.Content); encoded != "" {
+		if mem.Metadata == nil {
+			mem.Metadata = make(map[string]string)
+		}
+		mem.Metadata[RelatedFilesKey] = encoded
+	}
+
 	// 6. Persist
 	if err := m.store.Create(ctx, mem); err != nil {
 		return nil, fmt.Errorf("store create: %w", err)
@@ -221,6 +229,17 @@ func (m *Manager) Update(ctx context.Context, req *domain.UpdateRequest) (*domai
 		mem.Category = *req.Category
 	} else if contentChanged {
 		mem.Category = m.classifier.ClassifyCategory(mem.Content, mem.Tags)
+	}
+	// Re-extract related files for updated content; delete stale key if no paths found
+	if contentChanged {
+		if encoded := extractRelatedFiles(mem.Content); encoded != "" {
+			if mem.Metadata == nil {
+				mem.Metadata = make(map[string]string)
+			}
+			mem.Metadata[RelatedFilesKey] = encoded
+		} else if mem.Metadata != nil {
+			delete(mem.Metadata, RelatedFilesKey)
+		}
 	}
 	if req.Tags != nil {
 		mem.Tags = req.Tags
@@ -316,6 +335,14 @@ func (m *Manager) StoreWithoutGate(ctx context.Context, req *domain.StoreRequest
 	// Auto-generate summary if caller didn't provide one
 	if req.Summary == "" {
 		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
+	}
+
+	// Extract and store related file paths for file-aware retrieval boost
+	if encoded := extractRelatedFiles(mem.Content); encoded != "" {
+		if mem.Metadata == nil {
+			mem.Metadata = make(map[string]string)
+		}
+		mem.Metadata[RelatedFilesKey] = encoded
 	}
 
 	// 5. Persist

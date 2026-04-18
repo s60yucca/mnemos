@@ -36,7 +36,7 @@ func newTestMnemos(t *testing.T) *core.Mnemos {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
-	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7)
+	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7, 0.0)
 	relManager := relation.NewManager(relStore, memStore, logger)
 	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
 
@@ -223,7 +223,7 @@ func TestE2E_AssembleContext(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ctxResult, err := m.AssembleContext(ctx, "API gateway microservices", "proj-ctx", 2000, false)
+	ctxResult, err := m.AssembleContext(ctx, "API gateway microservices", "proj-ctx", 2000, false, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, ctxResult)
 	assert.Greater(t, ctxResult.TotalTokens, 0)

@@ -99,6 +99,7 @@ type HookConfig struct {
 	PromptSearchLimit        int           `mapstructure:"prompt_search_limit"`
 	LogLevel                 string        `mapstructure:"log_level"`
 	MMRLambda                float64       `mapstructure:"mmr_lambda"`
+	FileBoost                float64       `mapstructure:"file_boost"`
 }
 
 // DefaultConfig returns sensible defaults
@@ -143,6 +144,7 @@ func DefaultConfig() *Config {
 			PromptSearchLimit:        5,
 			LogLevel:                 "warn",
 			MMRLambda:                0.7,
+			FileBoost:                0.3,
 		},
 		QualityGate: QualityGateConfig{
 			Enabled:            true,
@@ -210,6 +212,7 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	v.SetDefault("hook.prompt_search_limit", cfg.Hook.PromptSearchLimit)
 	v.SetDefault("hook.log_level", cfg.Hook.LogLevel)
 	v.SetDefault("hook.mmr_lambda", cfg.Hook.MMRLambda)
+	v.SetDefault("hook.file_boost", cfg.Hook.FileBoost)
 	v.SetDefault("autopilot.max_backfill_per_run", 50)
 
 	v.SetEnvPrefix("MNEMOS")

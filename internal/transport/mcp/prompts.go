@@ -37,7 +37,7 @@ func (s *Server) handleLoadContextPrompt(ctx context.Context, req mcp.GetPromptR
 		}
 	}
 
-	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, true)
+	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, true, nil)
 	if err != nil {
 		return nil, err
 	}

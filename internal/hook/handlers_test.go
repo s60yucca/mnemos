@@ -155,7 +155,7 @@ func TestFormatContextResult_IncludesAutopilotSection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false)
+	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false, nil)
 	require.NoError(t, err)
 
 	// Use the updated formatContextResult with autopilot injection
@@ -182,7 +182,7 @@ func TestFormatContextResult_OmitsAutopilotSection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false)
+	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false, nil)
 	require.NoError(t, err)
 
 	output := hook.FormatContextResultForTest(ctx, mn, projectID, result)
@@ -225,7 +225,7 @@ func TestFormatContextResult_AutopilotTokenCap(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false)
+	result, err := mn.AssembleContext(ctx, "JWT authentication middleware", projectID, 2000, false, nil)
 	require.NoError(t, err)
 
 	output := hook.FormatContextResultForTest(ctx, mn, projectID, result)

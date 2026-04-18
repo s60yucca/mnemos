@@ -44,7 +44,7 @@ func newTestMnemos(t *testing.T) *core.Mnemos {
 	memMgr := memory.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger, nil)
 	t.Cleanup(func() { memMgr.Stop() })
 
-	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger, 0.7)
+	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger, 0.7, 0.0)
 	relMgr := relation.NewManager(relStore, store, logger)
 	lcEngine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, logger)
 

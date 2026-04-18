@@ -257,7 +257,7 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 	maxTokens := req.GetInt("max_tokens", 4000)
 	includeRelations := req.GetBool("include_relations", false)
 
-	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, includeRelations)
+	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, includeRelations, nil)
 	if err != nil {
 		return mcpError(err.Error()), nil
 	}

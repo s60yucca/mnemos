@@ -42,7 +42,7 @@ func NewSessionSimulator() (*SessionSimulator, error) {
 	noop := embedding.NewNoopProvider(384)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	engine := search.NewSearchEngine(fts, embedStore, noop, relations, logger, 0.7)
+	engine := search.NewSearchEngine(fts, embedStore, noop, relations, logger, 0.7, 0.0)
 
 	return &SessionSimulator{
 		db:     db,
@@ -105,7 +105,7 @@ func (s *SessionSimulator) RunScenario(ctx context.Context, scenario BenchmarkSc
 
 		// Run each task in the session.
 		for _, task := range scenario.Tasks {
-			result, err := s.engine.AssembleContext(ctx, task.Query, scenario.ProjectID, task.TokenBudget, false)
+			result, err := s.engine.AssembleContext(ctx, task.Query, scenario.ProjectID, task.TokenBudget, false, nil)
 			if err != nil {
 				// Log and record zero metrics rather than aborting.
 				result = &search.ContextResult{}

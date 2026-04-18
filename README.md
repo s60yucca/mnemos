@@ -27,7 +27,9 @@ Your AI learns architecture decisions, bug root causes, and project conventions 
 * **Hybrid Search:** Fast local FTS5 keyword search + optional Semantic Vector search (Ollama/OpenAI) using Reciprocal Rank Fusion (RRF).
 * **✨ NEW - Knowledge Synthesis:** Introduces the `mnemos_compile` tool for the AI to distill fragmented memories into comprehensive, long-term architectural documents.
 * **✨ NEW - Intelligent Hooks:** Advanced heuristic prompt filtering (detects technical terms) and session-end memory reminders ensure your agent never misses an important insight.
-* **✨ NEW - Passive Autopilot:** A background daemon that silently analyzes your memory store every 15 minutes — detecting stale compiled articles, auto-linking co-referenced memories, and surfacing findings directly in your next session context. Zero user intervention required.
+* **✨ NEW - Passive Autopilot:** A background daemon that silently analyzes your memory store every 15 minutes — detecting stale compiled articles, auto-linking co-referenced memories, and surfacing findings directly in your next session context.
+* **✨ NEW - Memory Backfill:** Auto-summarize and backfill past conversations directly into the memory store using `mnemos backfill`.
+* **✨ NEW - Retrieval Quality Benchmarks:** Built-in reproducible benchmark suite to measure MMR diversity and precision/recall across simulated session scenarios.
 
 ---
 

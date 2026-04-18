@@ -179,7 +179,7 @@ func BenchmarkAssembleContext(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		result, err := mn.AssembleContext(ctx, "authentication middleware JWT session", "bench-project", 2000, false)
+		result, err := mn.AssembleContext(ctx, "authentication middleware JWT session", "bench-project", 2000, false, nil)
 		if err != nil {
 			b.Fatalf("AssembleContext error: %v", err)
 		}

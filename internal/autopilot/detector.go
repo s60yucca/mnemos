@@ -86,3 +86,10 @@ func BuildEntityMaps(memories []*domain.Memory) EntityMaps {
 
 	return maps
 }
+
+// IsFilePath reports whether s matches the reFilePath pattern.
+// Used by the file-aware retrieval feature to filter ExtractEntities results
+// to file-path entities only.
+func IsFilePath(s string) bool {
+	return reFilePath.MatchString(s)
+}
