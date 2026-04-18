@@ -11,3 +11,11 @@ roadmap.md
 /mnemos
 /mnemos.exe
 roadmap-design-history.md
+demo.gif
+bin/mnemos
+scripts/demo-hooks.sh
+scripts/demo-recording.sh
+scripts/demo.sh
+scripts/demo.tape
+scripts/README.md
+scripts/RECORDING.md
