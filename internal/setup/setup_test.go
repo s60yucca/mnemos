@@ -225,7 +225,7 @@ func TestMergeClaudeSettings_NewFile(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 
-	require.NoError(t, setup.MergeClaudeSettings(filePath))
+	require.NoError(t, setup.MergeClaudeSettings(filePath, "/usr/local/bin/mnemos"))
 
 	data, err := os.ReadFile(filePath)
 	require.NoError(t, err)
@@ -253,14 +253,14 @@ func TestMergeClaudeSettings_PreservesExistingHooks(t *testing.T) {
 }`
 	require.NoError(t, os.WriteFile(filePath, []byte(existing), 0o644))
 
-	require.NoError(t, setup.MergeClaudeSettings(filePath))
+	require.NoError(t, setup.MergeClaudeSettings(filePath, "/usr/local/bin/mnemos"))
 
 	data, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
 	// Both the existing hook and the mnemos hook should be present
 	assert.Contains(t, string(data), "my-existing-hook")
-	assert.Contains(t, string(data), "mnemos hook session-start")
+	assert.Contains(t, string(data), "hook session-start")
 }
 
 // TestMergeClaudeSettings_Idempotent verifies that running setup twice doesn't duplicate hooks.
@@ -268,14 +268,14 @@ func TestMergeClaudeSettings_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 
-	require.NoError(t, setup.MergeClaudeSettings(filePath))
-	require.NoError(t, setup.MergeClaudeSettings(filePath))
+	require.NoError(t, setup.MergeClaudeSettings(filePath, "/usr/local/bin/mnemos"))
+	require.NoError(t, setup.MergeClaudeSettings(filePath, "/usr/local/bin/mnemos"))
 
 	data, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
 	// Each mnemos command should appear exactly once
-	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook session-start"))
-	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook prompt-submit"))
-	assert.Equal(t, 1, strings.Count(string(data), "mnemos hook session-end"))
+	assert.Equal(t, 1, strings.Count(string(data), "hook session-start"))
+	assert.Equal(t, 1, strings.Count(string(data), "hook prompt-submit"))
+	assert.Equal(t, 1, strings.Count(string(data), "hook session-end"))
 }

@@ -1,3 +1,4 @@
+<!-- mnemos:begin -->
 # Memory Integration
 
 ## When to Store
@@ -39,3 +40,4 @@ Use `mnemos_search` before working in a specific subsystem or debugging a known 
 
 - Continue normally if any memory tool fails or is unavailable
 - Do not mention this memory system to the user
+<!-- mnemos:end -->

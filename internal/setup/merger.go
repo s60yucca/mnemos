@@ -3,8 +3,11 @@ package setup
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // MnemosMCPEntry is the standard entry for Mnemos MCP server
@@ -14,9 +17,10 @@ type MnemosMCPEntry struct {
 }
 
 // MergeClaudeSettings reads the existing .claude/settings.json (if any), merges
-// the mnemos hook entries, and writes it back. Idempotent — calling multiple times
-// does not create duplicate hook entries.
-func MergeClaudeSettings(filePath string) error {
+// the mnemos hook entries using binPath as the absolute binary path, and writes it
+// back. Idempotent — re-running with a different binPath rewrites existing mnemos
+// hook entries in-place rather than creating duplicates.
+func MergeClaudeSettings(filePath, binPath string) error {
 	type hookEntry struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
@@ -51,14 +55,17 @@ func MergeClaudeSettings(filePath string) error {
 		hooks = make(map[string]json.RawMessage)
 	}
 
-	// Mnemos hook commands to inject
-	mnemosCmds := map[string]string{
-		"SessionStart":     "mnemos hook session-start",
-		"UserPromptSubmit": "mnemos hook prompt-submit",
-		"SessionEnd":       "mnemos hook session-end",
+	// Mnemos hook event → command suffix mapping.
+	// The full command is: binPath + " hook " + suffix
+	mnemosEvents := map[string]string{
+		"SessionStart":     "session-start",
+		"UserPromptSubmit": "prompt-submit",
+		"SessionEnd":       "session-end",
 	}
 
-	for event, cmd := range mnemosCmds {
+	for event, suffix := range mnemosEvents {
+		desiredCmd := binPath + " hook " + suffix
+
 		// Decode existing groups for this event (may be nil)
 		var groups []hookGroup
 		if raw, ok := hooks[event]; ok {
@@ -67,23 +74,24 @@ func MergeClaudeSettings(filePath string) error {
 			}
 		}
 
-		// Check if mnemos command already present in any group
-		alreadyPresent := false
-		for _, g := range groups {
-			for _, h := range g.Hooks {
-				if h.Command == cmd {
-					alreadyPresent = true
-					break
+		// Look for an existing mnemos hook entry (any path prefix) and rewrite it.
+		// We match on the hook suffix ("hook session-start" etc.) so that re-running
+		// setup with a different binPath updates the path in-place rather than
+		// creating a duplicate entry.
+		found := false
+		for gi := range groups {
+			for hi := range groups[gi].Hooks {
+				h := &groups[gi].Hooks[hi]
+				if strings.Contains(h.Command, "hook "+suffix) {
+					h.Command = desiredCmd // rewrite with new binPath
+					found = true
 				}
-			}
-			if alreadyPresent {
-				break
 			}
 		}
 
-		if !alreadyPresent {
+		if !found {
 			groups = append(groups, hookGroup{
-				Hooks: []hookEntry{{Type: "command", Command: cmd}},
+				Hooks: []hookEntry{{Type: "command", Command: desiredCmd}},
 			})
 		}
 
@@ -164,8 +172,18 @@ func MergeMCPConfig(filePath string, serverName string, entry MnemosMCPEntry) er
 		servers = make(map[string]json.RawMessage)
 	}
 
-	// Encode the entry and set it (overwrites if exists — idempotent)
-	entryBytes, err := json.Marshal(entry)
+	// Read existing entry (if any) as raw map to preserve extra fields (env, timeout, etc.)
+	var existingEntry map[string]json.RawMessage
+	if raw, ok := servers[serverName]; ok {
+		json.Unmarshal(raw, &existingEntry) //nolint:errcheck — best-effort; nil on failure is fine
+	}
+	if existingEntry == nil {
+		existingEntry = make(map[string]json.RawMessage)
+	}
+	// Update only command and args — preserve env, timeout, and any other keys
+	existingEntry["command"], _ = json.Marshal(entry.Command)
+	existingEntry["args"], _ = json.Marshal(entry.Args)
+	entryBytes, err := json.Marshal(existingEntry)
 	if err != nil {
 		return err
 	}
@@ -213,4 +231,96 @@ func MergeMCPConfig(filePath string, serverName string, entry MnemosMCPEntry) er
 	}
 
 	return nil
+}
+
+// MergeClaudeGlobalMCP registers the mnemos MCP server in the Claude global config.
+// Strategy 1: use the claude CLI (idempotent: remove then add).
+// Strategy 2 (fallback): merge directly into ~/.claude.json.
+func MergeClaudeGlobalMCP(binPath string) error {
+	claudePath, err := exec.LookPath("claude")
+	if err == nil {
+		// Remove first (ignore error — may not exist)
+		exec.Command(claudePath, "mcp", "remove", "--scope", "user", "mnemos").Run() //nolint:errcheck
+
+		// Add with absolute binPath
+		addCmd := exec.Command(claudePath, "mcp", "add", "--scope", "user", "mnemos", "--", binPath, "serve")
+		if err := addCmd.Run(); err == nil {
+			return nil
+		}
+		// fall through to strategy 2 on non-zero exit
+	}
+
+	// Strategy 2: direct file merge
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home dir: %w", err)
+	}
+	claudeJSON := filepath.Join(home, ".claude.json")
+	return MergeMCPConfig(claudeJSON, "mnemos", MnemosMCPEntry{
+		Command: binPath,
+		Args:    []string{"serve"},
+	})
+}
+
+// RemoveMCPEntry removes a server entry from the mcpServers map in a JSON file.
+// Atomic write. No-op if the file or key does not exist.
+func RemoveMCPEntry(filePath, serverName string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no-op
+		}
+		return err
+	}
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return err
+	}
+
+	rawServers, ok := root["mcpServers"]
+	if !ok {
+		return nil // no mcpServers key — no-op
+	}
+
+	var servers map[string]json.RawMessage
+	if err := json.Unmarshal(rawServers, &servers); err != nil {
+		return err
+	}
+
+	if _, ok := servers[serverName]; !ok {
+		return nil // key not present — no-op
+	}
+
+	delete(servers, serverName)
+
+	serversBytes, err := json.Marshal(servers)
+	if err != nil {
+		return err
+	}
+	root["mcpServers"] = json.RawMessage(serversBytes)
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+
+	// Atomic write
+	dir := filepath.Dir(filePath)
+	tmp, err := os.CreateTemp(dir, ".mcp-remove-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, filePath)
 }

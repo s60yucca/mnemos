@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mnemos-dev/mnemos/internal/setup"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // newSetupCmd creates the "mnemos setup" parent command with client subcommands.
@@ -31,19 +35,84 @@ func newSetupCmd() *cobra.Command {
 func newSetupClientCmd(clientName string) *cobra.Command {
 	var force bool
 	var global bool
+	var local bool
+	var uninstall bool
 
 	cmd := &cobra.Command{
 		Use:   clientName,
 		Short: fmt.Sprintf("Set up Mnemos integration for %s", clientName),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(clientName, force, global)
+			isGlobal, err := resolveScope(global, local)
+			if err != nil {
+				return err
+			}
+			if uninstall {
+				return runUninstall(clientName, isGlobal)
+			}
+			return runSetup(clientName, force, isGlobal)
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing files without prompting")
 	cmd.Flags().BoolVar(&global, "global", false, "install to home directory instead of current project")
+	cmd.Flags().BoolVar(&local, "local", false, "install to current project (explicit)")
+	cmd.Flags().BoolVar(&uninstall, "uninstall", false, "remove all mnemos setup artifacts")
 
 	return cmd
+}
+
+// resolveScope determines whether to install globally or locally.
+// Returns an error if both --global and --local are set (mutually exclusive).
+// If neither flag is set, checks if stdout is a TTY and prompts the user;
+// in non-TTY environments (CI, scripts), defaults to local scope silently.
+func resolveScope(globalFlag, localFlag bool) (bool, error) {
+	if globalFlag && localFlag {
+		return false, fmt.Errorf("--global and --local are mutually exclusive")
+	}
+	if globalFlag {
+		return true, nil
+	}
+	if localFlag {
+		return false, nil
+	}
+	// Neither flag: check TTY
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		fmt.Print("Install globally (all projects) or locally (this project only)? [G/l]: ")
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		response = strings.TrimSpace(strings.ToLower(response))
+		return response != "l" && response != "local", nil
+	}
+	return false, nil // non-TTY: default local, no output
+}
+
+// runUninstall removes all mnemos setup artifacts for the given client.
+func runUninstall(clientName string, global bool) error {
+	if clientName != "claude" {
+		return fmt.Errorf("--uninstall is currently only supported for the claude client")
+	}
+
+	binPath, err := setup.ResolveBinaryPath()
+	if err != nil {
+		// Fall back to bare name if resolution fails
+		binPath = "mnemos"
+	}
+
+	if global {
+		if err := setup.UninstallClaudeGlobal(binPath); err != nil {
+			return fmt.Errorf("uninstall global: %w", err)
+		}
+		fmt.Println("✅ Global mnemos setup artifacts removed.")
+	} else {
+		if err := setup.UninstallClaudeLocal(); err != nil {
+			return fmt.Errorf("uninstall local: %w", err)
+		}
+		fmt.Println("✅ Local mnemos setup artifacts removed.")
+	}
+	return nil
 }
 
 // runSetup performs the setup for a given client.
@@ -51,6 +120,13 @@ func runSetup(clientName string, force, global bool) error {
 	clientCfg, ok := setup.Clients[clientName]
 	if !ok {
 		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli", clientName)
+	}
+
+	// Resolve the absolute binary path early — used for hook commands and plist ProgramArguments.
+	binPath, err := setup.ResolveBinaryPath()
+	if err != nil {
+		// Fall back to bare name if resolution fails (e.g. during tests)
+		binPath = "mnemos"
 	}
 
 	// Ensure global config exists (idempotent)
@@ -62,6 +138,12 @@ func runSetup(clientName string, force, global bool) error {
 	baseDir, err := resolveBaseDir(global)
 	if err != nil {
 		return err
+	}
+
+	// Capture cwd for duplicate MCP warning check
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve working dir: %w", err)
 	}
 
 	writer := setup.NewWriter(baseDir, global, force)
@@ -88,7 +170,7 @@ func runSetup(clientName string, force, global bool) error {
 				return fmt.Errorf("merge %s: %w", targetPath, err)
 			}
 		} else if fm.MergeJSON {
-			if err := setup.MergeClaudeSettings(targetPath); err != nil {
+			if err := setup.MergeClaudeSettings(targetPath, binPath); err != nil {
 				return fmt.Errorf("merge %s: %w", targetPath, err)
 			}
 		} else {
@@ -98,22 +180,57 @@ func runSetup(clientName string, force, global bool) error {
 		}
 	}
 
-	// Merge MCP config
-	mcpPath := clientCfg.MCPConfig.LocalPath
-	if global {
-		mcpPath = clientCfg.MCPConfig.GlobalPath
-	}
-	mcpTarget := filepath.Join(baseDir, mcpPath)
+	// Merge MCP config — claude global uses a different strategy
+	if clientName == "claude" && global {
+		// Use MergeClaudeGlobalMCP instead of generic MergeMCPConfig
+		if err := setup.MergeClaudeGlobalMCP(binPath); err != nil {
+			return fmt.Errorf("merge global MCP: %w", err)
+		}
 
-	if err := setup.MergeMCPConfig(mcpTarget, "mnemos", setup.MnemosMCPEntry{
-		Command: "mnemos",
-		Args:    []string{"serve"},
-	}); err != nil {
-		return fmt.Errorf("merge MCP config: %w", err)
-	}
+		// Install launchd plist on darwin (no-op on other platforms)
+		if err := setup.InstallLaunchdPlist(binPath); err != nil {
+			return fmt.Errorf("install launchd plist: %w", err)
+		}
 
-	writer.Report()
-	fmt.Printf("MCP config updated: %s\n", mcpTarget)
+		// Check for duplicate MCP warning: project-scope .mcp.json takes precedence in Claude Code
+		localMCP := filepath.Join(cwd, ".mcp.json")
+		if localHasMnemos(localMCP) {
+			fmt.Println("Warning: mnemos MCP entry found in both .mcp.json and ~/.claude.json. " +
+				"Project-scope takes precedence in Claude Code.")
+		}
+
+		writer.Report()
+		fmt.Println("Global MCP config updated: ~/.claude.json")
+	} else {
+		// Use generic MergeMCPConfig for local or non-claude clients
+		mcpPath := clientCfg.MCPConfig.LocalPath
+		if global {
+			mcpPath = clientCfg.MCPConfig.GlobalPath
+		}
+		mcpTarget := filepath.Join(baseDir, mcpPath)
+
+		if err := setup.MergeMCPConfig(mcpTarget, "mnemos", setup.MnemosMCPEntry{
+			Command: binPath,
+			Args:    []string{"serve"},
+		}); err != nil {
+			return fmt.Errorf("merge MCP config: %w", err)
+		}
+
+		// Check for duplicate MCP warning: if installing locally, warn if ~/.claude.json also has mnemos
+		if clientName == "claude" && !global {
+			home, _ := os.UserHomeDir()
+			if home != "" {
+				globalMCP := filepath.Join(home, ".claude.json")
+				if localHasMnemos(globalMCP) {
+					fmt.Println("Warning: mnemos MCP entry found in both .mcp.json and ~/.claude.json. " +
+						"Project-scope takes precedence in Claude Code.")
+				}
+			}
+		}
+
+		writer.Report()
+		fmt.Printf("MCP config updated: %s\n", mcpTarget)
+	}
 
 	if clientName == "gemini-cli" {
 		fmt.Println("✅ Gemini CLI configured. Run `gemini` in this directory to verify mnemos is connected.")
@@ -138,4 +255,27 @@ func resolveBaseDir(global bool) (string, error) {
 		return "", fmt.Errorf("resolve working dir: %w", err)
 	}
 	return cwd, nil
+}
+
+// localHasMnemos checks whether a JSON file at filePath contains a "mnemos" key
+// under "mcpServers". Returns false on any error (file absent, parse failure, etc.).
+func localHasMnemos(filePath string) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return false
+	}
+	rawServers, ok := root["mcpServers"]
+	if !ok {
+		return false
+	}
+	var servers map[string]json.RawMessage
+	if err := json.Unmarshal(rawServers, &servers); err != nil {
+		return false
+	}
+	_, ok = servers["mnemos"]
+	return ok
 }

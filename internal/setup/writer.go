@@ -3,6 +3,7 @@ package setup
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -57,6 +58,21 @@ func (w *Writer) WriteFile(targetPath, templateContent string) (bool, error) {
 // already contain mergeMarker. If the file does not exist, it is created with
 // templateContent. This is idempotent — running setup multiple times will not
 // duplicate the mnemos section.
+//
+// The injected content is wrapped in sentinel markers:
+//
+//	<!-- mnemos:begin -->
+//	<templateContent>
+//	<!-- mnemos:end -->
+//
+// The caller should pass "<!-- mnemos:begin -->" as mergeMarker so the idempotency
+// check correctly detects an already-injected block.
+//
+// Legacy migration: if the file contains the old marker "mnemos_store" but NOT the
+// new sentinel "<!-- mnemos:begin -->", a warning is logged and the append is skipped
+// to avoid creating a duplicate block. The user must manually remove the legacy section
+// and re-run setup.
+//
 // Returns (appended bool, err error).
 func (w *Writer) MergeMarkdownFile(targetPath, templateContent, mergeMarker string) (bool, error) {
 	existing, err := os.ReadFile(targetPath)
@@ -65,12 +81,23 @@ func (w *Writer) MergeMarkdownFile(targetPath, templateContent, mergeMarker stri
 	}
 
 	if len(existing) > 0 {
-		// Already contains the mnemos section — skip
-		if strings.Contains(string(existing), mergeMarker) {
+		existingStr := string(existing)
+
+		// Already contains the mnemos section (new sentinel) — skip
+		if strings.Contains(existingStr, mergeMarker) {
 			return false, nil
 		}
-		// Append with a blank line separator
-		merged := strings.TrimRight(string(existing), "\n") + "\n\n" + templateContent
+
+		// Check for legacy content (old marker without sentinels)
+		if strings.Contains(existingStr, "mnemos_store") && !strings.Contains(existingStr, "<!-- mnemos:begin -->") {
+			log.Printf("Warning: %s contains legacy mnemos content without sentinel markers. "+
+				"Manual cleanup required: delete the '# Memory Integration' section, then re-run setup.", targetPath)
+			return false, nil // skip — don't add a second block
+		}
+
+		// Append with a blank line separator, wrapped in sentinel markers
+		wrapped := "<!-- mnemos:begin -->\n" + templateContent + "\n<!-- mnemos:end -->\n"
+		merged := strings.TrimRight(existingStr, "\n") + "\n\n" + wrapped
 		if err := w.atomicWrite(targetPath, merged); err != nil {
 			return false, err
 		}
@@ -78,8 +105,9 @@ func (w *Writer) MergeMarkdownFile(targetPath, templateContent, mergeMarker stri
 		return true, nil
 	}
 
-	// File doesn't exist — create it
-	if err := w.atomicWrite(targetPath, templateContent); err != nil {
+	// File doesn't exist — create it, wrapped in sentinel markers
+	wrapped := "<!-- mnemos:begin -->\n" + templateContent + "\n<!-- mnemos:end -->\n"
+	if err := w.atomicWrite(targetPath, wrapped); err != nil {
 		return false, err
 	}
 	w.written = append(w.written, targetPath)

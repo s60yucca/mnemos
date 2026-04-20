@@ -33,7 +33,7 @@ var Clients = map[string]ClientConfig{
 				LocalPath:    "CLAUDE.md",
 				GlobalPath:   "CLAUDE.md",
 				MergeMode:    true,
-				MergeMarker:  "mnemos_store",
+				MergeMarker:  "<!-- mnemos:begin -->",
 			},
 			{
 				TemplatePath: "templates/claude/settings.json",
