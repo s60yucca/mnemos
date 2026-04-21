@@ -112,7 +112,7 @@ func main() {
 	defer mnemos.Shutdown()
 
 	// Autopilot daemon (started at application level to avoid circular import core→autopilot→core)
-	daemon := autopilot.NewAutopilotDaemon(mnemos, cfg.Autopilot, logger, autopilot.NewReportWriter(mnemos))
+	daemon := autopilot.NewAutopilotDaemon(mnemos, cfg.Autopilot, cfg.DataDir, logger, autopilot.NewReportWriter(mnemos))
 	daemon.Start()
 	defer daemon.Stop()
 
@@ -120,7 +120,7 @@ func main() {
 	rootCmd := cli.NewRootCmd(mnemos, resolveVersion())
 	rootCmd.AddCommand(newHookCmd(cfg))
 	rootCmd.AddCommand(newSetupCmd())
-	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
+	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos, cfg.DataDir))
 	rootCmd.AddCommand(newBackfillCmd(mnemos))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)

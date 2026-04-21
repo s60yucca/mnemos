@@ -2,7 +2,10 @@ package autopilot
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -24,17 +27,22 @@ type noopWriter struct{}
 func (noopWriter) Write(_ context.Context, _ string, _ []Finding) error { return nil }
 
 // DaemonStatus holds a snapshot of the daemon's current state.
+// It is also the on-disk format written to autopilot-state.json so that
+// `mnemos autopilot status` can read it from outside the running process.
 type DaemonStatus struct {
-	Enabled          bool
-	LastRun          map[string]time.Time
-	LastFindingCount int
-	NextRun          time.Time
+	Enabled          bool                 `json:"enabled"`
+	LastRun          map[string]time.Time `json:"last_run"`
+	LastFindingCount int                  `json:"last_finding_count"`
+	NextRun          time.Time            `json:"next_run"`
+	UpdatedAt        time.Time            `json:"updated_at"` // when this snapshot was written
+	PID              int                  `json:"pid"`        // PID of the process that wrote it
 }
 
 // AutopilotDaemon runs the detector pipeline on a timer.
 type AutopilotDaemon struct {
 	mnemos    *core.Mnemos
 	cfg       config.AutopilotConfig
+	dataDir   string // ~/.mnemos — for persisting state
 	logger    *slog.Logger
 	detectors []Detector
 	writer    reportWriter
@@ -51,6 +59,7 @@ type AutopilotDaemon struct {
 func NewAutopilotDaemon(
 	mnemos *core.Mnemos,
 	cfg config.AutopilotConfig,
+	dataDir string,
 	logger *slog.Logger,
 	writer reportWriter,
 ) *AutopilotDaemon {
@@ -58,9 +67,10 @@ func NewAutopilotDaemon(
 		writer = noopWriter{}
 	}
 	return &AutopilotDaemon{
-		mnemos: mnemos,
-		cfg:    cfg,
-		logger: logger,
+		mnemos:  mnemos,
+		cfg:     cfg,
+		dataDir: dataDir,
+		logger:  logger,
 		detectors: []Detector{
 			NewStalenessDetector(mnemos, cfg),
 			NewRelationDetector(mnemos, cfg),
@@ -136,7 +146,55 @@ func (d *AutopilotDaemon) Status() DaemonStatus {
 		LastRun:          lastRunCopy,
 		LastFindingCount: d.lastFindingCount,
 		NextRun:          d.nextRun,
+		UpdatedAt:        time.Now(),
+		PID:              os.Getpid(),
 	}
+}
+
+// statePath returns the path to the on-disk state file.
+func (d *AutopilotDaemon) statePath() string {
+	return filepath.Join(d.dataDir, "autopilot-state.json")
+}
+
+// persistState writes the current daemon status to disk atomically.
+// Called after every runCycle so `mnemos autopilot status` can read it
+// from outside the running process.
+func (d *AutopilotDaemon) persistState() {
+	s := d.Status()
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		d.logger.Warn("autopilot: failed to marshal state", "err", err)
+		return
+	}
+	path := d.statePath()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		d.logger.Warn("autopilot: failed to write state file", "err", err)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		d.logger.Warn("autopilot: failed to rename state file", "err", err)
+		os.Remove(tmp)
+	}
+}
+
+// ReadStateFile reads the persisted daemon status from disk.
+// Returns nil if the file does not exist (daemon has never run).
+// Used by `mnemos autopilot status` to show real state across processes.
+func ReadStateFile(dataDir string) (*DaemonStatus, error) {
+	path := filepath.Join(dataDir, "autopilot-state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var s DaemonStatus
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // RunOnce executes the full detector pipeline for a single project synchronously.
@@ -243,4 +301,7 @@ func (d *AutopilotDaemon) runCycle(ctx context.Context) {
 	d.mu.Unlock()
 
 	d.logger.Info("autopilot run", "findings", total, "duration_ms", time.Since(start).Milliseconds(), "skipped", false)
+
+	// Persist state to disk so `mnemos autopilot status` can read it cross-process.
+	d.persistState()
 }

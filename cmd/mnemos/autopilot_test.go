@@ -65,7 +65,7 @@ func buildDisabledDaemon(mnemos *core.Mnemos) *autopilot.AutopilotDaemon {
 		MaxMemoriesPerRun: 200,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return autopilot.NewAutopilotDaemon(mnemos, cfg, logger, nil)
+	return autopilot.NewAutopilotDaemon(mnemos, cfg, os.TempDir(), logger, nil)
 }
 
 // buildEnabledDaemon creates an AutopilotDaemon with enabled=true.
@@ -78,7 +78,7 @@ func buildEnabledDaemon(mnemos *core.Mnemos) *autopilot.AutopilotDaemon {
 		MaxMemoriesPerRun: 200,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return autopilot.NewAutopilotDaemon(mnemos, cfg, logger, nil)
+	return autopilot.NewAutopilotDaemon(mnemos, cfg, os.TempDir(), logger, nil)
 }
 
 // captureStdout runs f and returns whatever was written to os.Stdout.
@@ -118,7 +118,7 @@ func TestAutopilotStatus_Disabled(t *testing.T) {
 	daemon := buildDisabledDaemon(mnemos)
 
 	rootCmd := &cobra.Command{Use: "mnemos"}
-	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
+	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos, t.TempDir()))
 
 	out := executeCmd(t, rootCmd, []string{"autopilot", "status"})
 
@@ -137,7 +137,7 @@ func TestAutopilotReport_NoReport(t *testing.T) {
 	daemon := buildEnabledDaemon(mnemos)
 
 	rootCmd := &cobra.Command{Use: "mnemos"}
-	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
+	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos, t.TempDir()))
 
 	out := executeCmd(t, rootCmd, []string{"autopilot", "report", "--project", "test-project"})
 
@@ -191,7 +191,7 @@ func TestAutopilotRun_DryRun(t *testing.T) {
 	}
 
 	rootCmd := &cobra.Command{Use: "mnemos"}
-	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos))
+	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos, t.TempDir()))
 
 	out := executeCmd(t, rootCmd, []string{"autopilot", "run", "--dry-run", "--project", projectID})
 

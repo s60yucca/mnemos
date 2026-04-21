@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/autopilot"
 	core "github.com/mnemos-dev/mnemos/internal/core"
@@ -12,14 +13,14 @@ import (
 
 // newAutopilotCmd creates the "mnemos autopilot" parent command.
 // mnemos is needed by the run subcommand to call ListDistinctProjectIDs.
-func newAutopilotCmd(daemon *autopilot.AutopilotDaemon, mnemos *core.Mnemos) *cobra.Command {
+func newAutopilotCmd(daemon *autopilot.AutopilotDaemon, mnemos *core.Mnemos, dataDir string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "autopilot",
 		Short: "Autopilot daemon control",
 		Long:  "Inspect and control the passive autopilot background daemon.",
 	}
 
-	cmd.AddCommand(newAutopilotStatusCmd(daemon))
+	cmd.AddCommand(newAutopilotStatusCmd(daemon, dataDir))
 	cmd.AddCommand(newAutopilotRunCmd(daemon, mnemos))
 	cmd.AddCommand(newAutopilotReportCmd(mnemos))
 
@@ -27,28 +28,61 @@ func newAutopilotCmd(daemon *autopilot.AutopilotDaemon, mnemos *core.Mnemos) *co
 }
 
 // newAutopilotStatusCmd prints the current daemon state as plain text.
-func newAutopilotStatusCmd(daemon *autopilot.AutopilotDaemon) *cobra.Command {
+// It reads the persisted state file written by the running daemon process,
+// so the output reflects the actual running daemon rather than a fresh process.
+func newAutopilotStatusCmd(daemon *autopilot.AutopilotDaemon, dataDir string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show autopilot daemon status",
 		Run: func(cmd *cobra.Command, args []string) {
-			s := daemon.Status()
-			fmt.Printf("enabled:       %v\n", s.Enabled)
-			fmt.Printf("last_findings: %d\n", s.LastFindingCount)
-			if s.NextRun.IsZero() {
-				fmt.Println("next_run:      (not scheduled)")
-			} else {
-				fmt.Printf("next_run:      %s\n", s.NextRun.Format("2006-01-02T15:04:05Z07:00"))
+			// Try to read persisted state from the running daemon first.
+			// Fall back to in-process state (always shows "not scheduled") only
+			// if the state file doesn't exist yet (daemon has never completed a cycle).
+			persisted, err := autopilot.ReadStateFile(dataDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not read state file: %v\n", err)
 			}
-			if len(s.LastRun) == 0 {
-				fmt.Println("last_run:      (none)")
+
+			if persisted != nil {
+				// Show persisted state from the running daemon process.
+				printDaemonStatus(persisted, true)
 			} else {
-				fmt.Println("last_run:")
-				for proj, t := range s.LastRun {
-					fmt.Printf("  %s: %s\n", proj, t.Format("2006-01-02T15:04:05Z07:00"))
-				}
+				// No state file yet — daemon has never completed a cycle.
+				s := daemon.Status()
+				printDaemonStatus(&s, false)
+				fmt.Println()
+				fmt.Println("note: daemon runs inside 'mnemos serve' (spawned by your MCP client).")
+				fmt.Println("      state file will appear after the first autopilot cycle completes.")
 			}
 		},
+	}
+}
+
+func printDaemonStatus(s *autopilot.DaemonStatus, fromFile bool) {
+	fmt.Printf("enabled:       %v\n", s.Enabled)
+	fmt.Printf("last_findings: %d\n", s.LastFindingCount)
+	if s.NextRun.IsZero() {
+		fmt.Println("next_run:      (not scheduled)")
+	} else {
+		// If next_run is in the past, the daemon is likely between cycles.
+		if time.Now().After(s.NextRun) {
+			fmt.Printf("next_run:      %s (overdue — cycle may be running)\n",
+				s.NextRun.Format("2006-01-02T15:04:05Z07:00"))
+		} else {
+			fmt.Printf("next_run:      %s\n", s.NextRun.Format("2006-01-02T15:04:05Z07:00"))
+		}
+	}
+	if len(s.LastRun) == 0 {
+		fmt.Println("last_run:      (none)")
+	} else {
+		fmt.Println("last_run:")
+		for proj, t := range s.LastRun {
+			fmt.Printf("  %s: %s\n", proj, t.Format("2006-01-02T15:04:05Z07:00"))
+		}
+	}
+	if fromFile && !s.UpdatedAt.IsZero() {
+		fmt.Printf("state_updated: %s (pid %d)\n",
+			s.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), s.PID)
 	}
 }
 

@@ -64,7 +64,7 @@ func newTestDaemon(env *stalenessTestEnv, w *mockWriter) *AutopilotDaemon {
 	cfg := defaultCfg()
 	cfg.InitialDelay = 10 * time.Millisecond
 	cfg.Interval = 100 * time.Millisecond
-	return NewAutopilotDaemon(env.mnemos, cfg, testLogger(), w)
+	return NewAutopilotDaemon(env.mnemos, cfg, os.TempDir(), testLogger(), w)
 }
 
 // TestDaemon_IdleSkip: store memories, run once, run again without new memories → second run writes no report
@@ -141,7 +141,7 @@ func TestDaemon_StopWithinTimeout(t *testing.T) {
 	cfg.InitialDelay = 10 * time.Second // long delay so it doesn't run during test
 	cfg.Interval = 10 * time.Second
 
-	daemon := NewAutopilotDaemon(env.mnemos, cfg, testLogger(), w)
+	daemon := NewAutopilotDaemon(env.mnemos, cfg, t.TempDir(), testLogger(), w)
 	daemon.Start()
 
 	done := make(chan struct{})

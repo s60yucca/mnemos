@@ -70,7 +70,7 @@ func TestIntegration_FullDaemonRun(t *testing.T) {
 	}
 
 	writer := NewReportWriter(env.mnemos)
-	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), testLogger(), writer)
+	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), t.TempDir(), testLogger(), writer)
 
 	findings, err := daemon.RunOnce(ctx, projectID, false)
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestIntegration_IdleSkip(t *testing.T) {
 		"bug in internal/storage/sqlite/store.go line 42", domain.MemoryTypeSemantic, now, now)
 
 	writer := NewReportWriter(env.mnemos)
-	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), testLogger(), writer)
+	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), t.TempDir(), testLogger(), writer)
 
 	// First run for project A
 	_, err := daemon.RunOnce(ctx, projectA, false)
@@ -164,7 +164,7 @@ func TestIntegration_DryRun(t *testing.T) {
 		"bug in internal/storage/sqlite/store.go line 42", domain.MemoryTypeSemantic, now, now)
 
 	writer := NewReportWriter(env.mnemos)
-	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), testLogger(), writer)
+	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), t.TempDir(), testLogger(), writer)
 
 	findings, err := daemon.RunOnce(ctx, projectID, true)
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestIntegration_StalenessEndToEnd(t *testing.T) {
 	linkCompiledFrom(t, env.relStore, article.ID, src3.ID)
 
 	writer := NewReportWriter(env.mnemos)
-	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), testLogger(), writer)
+	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), t.TempDir(), testLogger(), writer)
 
 	findings, err := daemon.RunOnce(ctx, projectID, false)
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestIntegration_ContextAssemblyIncludesReport(t *testing.T) {
 	}
 
 	writer := NewReportWriter(env.mnemos)
-	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), testLogger(), writer)
+	daemon := NewAutopilotDaemon(env.mnemos, defaultCfg(), t.TempDir(), testLogger(), writer)
 
 	// Run daemon to create relations and write report
 	_, err := daemon.RunOnce(ctx, projectID, false)
