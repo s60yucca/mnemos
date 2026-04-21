@@ -91,6 +91,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, r io.Reader, w io.Writer) {
 
 	d.writeOutput(w, out)
 	d.logCompletion(input, time.Since(start), out.Status)
+
+	// Log "hot moment" when context was actually injected — used by demo trimming scripts.
+	if out.ContextInjection != "" {
+		memoriesFound := 0
+		tokensUsed := 0
+		if v, ok := out.Metadata["memories_found"]; ok {
+			if n, ok := v.(int); ok {
+				memoriesFound = n
+			}
+		}
+		if v, ok := out.Metadata["tokens_used"]; ok {
+			if n, ok := v.(int); ok {
+				tokensUsed = n
+			}
+		}
+		d.logContextInjected(input.Hook, input.SessionID, resolveProjectID(&input), memoriesFound, tokensUsed)
+	}
 }
 
 // writeOutput encodes out as JSON to w. If encoding fails, writes a fallback error JSON.
@@ -103,11 +120,24 @@ func (d *Dispatcher) writeOutput(w io.Writer, out *HookOutput) {
 
 // logCompletion writes a structured log entry after each hook dispatch.
 func (d *Dispatcher) logCompletion(input HookInput, duration time.Duration, status string) {
-	d.logger.Info("hook completed",
+	d.logger.Warn("hook completed",
 		slog.String("hook_type", input.Hook),
 		slog.String("session_id", input.SessionID),
 		slog.String("project_id", resolveProjectID(&input)),
 		slog.Int64("duration_ms", duration.Milliseconds()),
 		slog.String("status", status),
+	)
+}
+
+// logContextInjected writes a structured log entry when context is injected into a session.
+// This is the "hot moment" log used by demo trimming scripts to find interesting clips.
+func (d *Dispatcher) logContextInjected(hookType, sessionID, projectID string, memoriesFound, tokensUsed int) {
+	d.logger.Warn("context injected",
+		slog.String("hook_type", hookType),
+		slog.String("session_id", sessionID),
+		slog.String("project_id", projectID),
+		slog.Int("memories_found", memoriesFound),
+		slog.Int("tokens_used", tokensUsed),
+		slog.Time("injected_at", time.Now()),
 	)
 }

@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 420" width="860" height="420" style="font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117;">
+
+  <defs>
+    <style>
+      .label    { font-size: 11px; fill: #8b949e; }
+      .code     { font-size: 12px; fill: #e6edf3; }
+      .dim      { font-size: 12px; fill: #484f58; }
+      .green    { fill: #3fb950; }
+      .orange   { fill: #d29922; }
+      .blue     { fill: #58a6ff; }
+      .purple   { fill: #bc8cff; }
+      .red      { fill: #f85149; }
+      .title    { font-size: 13px; font-weight: bold; fill: #e6edf3; }
+      .badge    { font-size: 10px; fill: #0d1117; font-weight: bold; }
+      .arrow    { stroke: #30363d; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+      .arrow-g  { stroke: #3fb950; stroke-width: 1.5; fill: none; marker-end: url(#arr-g); }
+    </style>
+
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#30363d"/>
+    </marker>
+    <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3fb950"/>
+    </marker>
+
+    <!-- fade-in animations -->
+    <style>
+      .fade1  { animation: fadein 0.4s 0.2s both; }
+      .fade2  { animation: fadein 0.4s 0.8s both; }
+      .fade3  { animation: fadein 0.4s 1.4s both; }
+      .fade4  { animation: fadein 0.4s 2.0s both; }
+      .fade5  { animation: fadein 0.4s 2.6s both; }
+      .fade6  { animation: fadein 0.4s 3.2s both; }
+      .fade7  { animation: fadein 0.4s 3.8s both; }
+      .fade8  { animation: fadein 0.4s 4.4s both; }
+      .fade9  { animation: fadein 0.4s 5.0s both; }
+      .fade10 { animation: fadein 0.4s 5.6s both; }
+      .fade11 { animation: fadein 0.4s 6.2s both; }
+      .fade12 { animation: fadein 0.4s 6.8s both; }
+      .fade13 { animation: fadein 0.4s 7.4s both; }
+      .fade14 { animation: fadein 0.4s 8.0s both; }
+      .pulse  { animation: pulse 2s 8.5s infinite; }
+      @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes pulse  { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    </style>
+  </defs>
+
+  <!-- ── Background panels ─────────────────────────────────────────── -->
+  <rect x="10"  y="10" width="400" height="400" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <rect x="450" y="10" width="400" height="400" rx="8" fill="#161b22" stroke="#238636" stroke-width="1"/>
+
+  <!-- ── Panel titles ──────────────────────────────────────────────── -->
+  <rect x="10"  y="10" width="400" height="36" rx="8" fill="#21262d"/>
+  <rect x="10"  y="38" width="400" height="8"  fill="#21262d"/>
+  <text x="210" y="33" text-anchor="middle" class="title red">✗  Without mnemos</text>
+
+  <rect x="450" y="10" width="400" height="36" rx="8" fill="#1a2d1a"/>
+  <rect x="450" y="38" width="400" height="8"  fill="#1a2d1a"/>
+  <text x="650" y="33" text-anchor="middle" class="title green">✓  With mnemos</text>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       LEFT PANEL — Without mnemos
+  ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Day 1 -->
+  <text x="30" y="75" class="label fade1">DAY 1</text>
+  <text x="30" y="95" class="code fade2">You: "Fix the JWT expiry bug"</text>
+  <text x="30" y="115" class="dim fade3">Agent: "What's the auth config?"</text>
+  <text x="30" y="135" class="code fade4" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
+  <text x="30" y="155" class="dim fade5">Agent: fixes bug ✓</text>
+
+  <!-- divider -->
+  <line x1="30" y1="172" x2="390" y2="172" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade5"/>
+
+  <!-- Day 2 -->
+  <text x="30" y="192" class="label fade6">DAY 2  (new session)</text>
+  <text x="30" y="212" class="code fade7">You: "Add refresh token support"</text>
+  <text x="30" y="232" class="dim fade8">Agent: "What's the auth config?"</text>
+  <text x="30" y="252" class="code fade9" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
+  <text x="30" y="272" class="dim fade10">Agent: implements ✓</text>
+
+  <!-- divider -->
+  <line x1="30" y1="289" x2="390" y2="289" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade10"/>
+
+  <!-- Day 3 -->
+  <text x="30" y="309" class="label fade11">DAY 3  (new session)</text>
+  <text x="30" y="329" class="code fade12">You: "Debug the token validation"</text>
+  <text x="30" y="349" class="dim fade13">Agent: "What's the auth config?"</text>
+  <text x="30" y="369" class="code fade14" fill="#f85149">You: "...again?!"</text>
+
+  <!-- frustration icon -->
+  <text x="340" y="375" font-size="28" class="fade14">😤</text>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       RIGHT PANEL — With mnemos
+  ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Day 1 -->
+  <text x="470" y="75" class="label fade1">DAY 1</text>
+  <text x="470" y="95" class="code fade2">You: "Fix the JWT expiry bug"</text>
+  <text x="470" y="115" class="dim fade3">Agent: "What's the auth config?"</text>
+  <text x="470" y="135" class="code fade4" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
+  <text x="470" y="155" class="dim fade5">Agent: fixes bug ✓</text>
+
+  <!-- mnemos auto-store badge -->
+  <rect x="470" y="165" width="340" height="22" rx="4" fill="#1a2d1a" class="fade5"/>
+  <text x="480" y="180" class="label fade5" fill="#3fb950">⚡ mnemos stored automatically — quality: 0.91 | linked: auth/config.go</text>
+
+  <!-- divider -->
+  <line x1="470" y1="198" x2="830" y2="198" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade6"/>
+
+  <!-- Day 2 -->
+  <text x="470" y="218" class="label fade6">DAY 2  (new session)</text>
+  <text x="470" y="238" class="code fade7">You: "Add refresh token support"</text>
+
+  <!-- mnemos auto-inject badge -->
+  <rect x="470" y="248" width="340" height="22" rx="4" fill="#1a2d1a" class="fade8"/>
+  <text x="480" y="263" class="label fade8" fill="#58a6ff">🧠 mnemos injected: JWT RS256, 1h expiry — auth/config.go</text>
+
+  <text x="470" y="285" class="dim fade9">Agent: "Using RS256 config from auth/config.go..."</text>
+  <text x="470" y="305" class="dim fade10">Agent: implements ✓  <tspan fill="#3fb950">(no re-explaining)</tspan></text>
+
+  <!-- divider -->
+  <line x1="470" y1="322" x2="830" y2="322" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade10"/>
+
+  <!-- Day 3 -->
+  <text x="470" y="342" class="label fade11">DAY 3  (new session)</text>
+  <text x="470" y="362" class="code fade12">You: "Debug the token validation"</text>
+
+  <!-- mnemos auto-inject badge -->
+  <rect x="470" y="372" width="340" height="22" rx="4" fill="#1a2d1a" class="fade13"/>
+  <text x="480" y="387" class="label fade13" fill="#58a6ff">🧠 mnemos injected: 3 memories, 380 tokens</text>
+
+  <!-- happy icon -->
+  <text x="780" y="395" font-size="28" class="fade14 pulse">🚀</text>
+
+</svg>
