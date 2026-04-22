@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 420" width="860" height="420" style="font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 820" width="860" height="820" style="font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117;">
 
   <defs>
     <style>
@@ -12,42 +12,47 @@
       .red      { fill: #f85149; }
       .title    { font-size: 13px; font-weight: bold; fill: #e6edf3; }
       .badge    { font-size: 10px; fill: #0d1117; font-weight: bold; }
-      .arrow    { stroke: #30363d; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
-      .arrow-g  { stroke: #3fb950; stroke-width: 1.5; fill: none; marker-end: url(#arr-g); }
     </style>
-
-    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#30363d"/>
-    </marker>
-    <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#3fb950"/>
-    </marker>
 
     <!-- fade-in animations -->
     <style>
       .fade1  { animation: fadein 0.4s 0.2s both; }
-      .fade2  { animation: fadein 0.4s 0.8s both; }
-      .fade3  { animation: fadein 0.4s 1.4s both; }
-      .fade4  { animation: fadein 0.4s 2.0s both; }
-      .fade5  { animation: fadein 0.4s 2.6s both; }
-      .fade6  { animation: fadein 0.4s 3.2s both; }
-      .fade7  { animation: fadein 0.4s 3.8s both; }
-      .fade8  { animation: fadein 0.4s 4.4s both; }
-      .fade9  { animation: fadein 0.4s 5.0s both; }
-      .fade10 { animation: fadein 0.4s 5.6s both; }
-      .fade11 { animation: fadein 0.4s 6.2s both; }
-      .fade12 { animation: fadein 0.4s 6.8s both; }
-      .fade13 { animation: fadein 0.4s 7.4s both; }
-      .fade14 { animation: fadein 0.4s 8.0s both; }
-      .pulse  { animation: pulse 2s 8.5s infinite; }
+      .fade2  { animation: fadein 0.4s 0.6s both; }
+      .fade3  { animation: fadein 0.4s 1.0s both; }
+      .fade4  { animation: fadein 0.4s 1.4s both; }
+      .fade5  { animation: fadein 0.4s 1.8s both; }
+      .fade6  { animation: fadein 0.4s 2.2s both; }
+      .fade7  { animation: fadein 0.4s 2.6s both; }
+      .fade8  { animation: fadein 0.4s 3.0s both; }
+      .fade9  { animation: fadein 0.4s 3.4s both; }
+      .fade10 { animation: fadein 0.4s 3.8s both; }
+      .fade11 { animation: fadein 0.4s 4.2s both; }
+      .fade12 { animation: fadein 0.4s 4.6s both; }
+      .fade13 { animation: fadein 0.4s 5.0s both; }
+      .fade14 { animation: fadein 0.4s 5.4s both; }
+      .fade15 { animation: fadein 0.4s 5.8s both; }
+      .fade16 { animation: fadein 0.4s 6.2s both; }
+      .fade17 { animation: fadein 0.4s 6.6s both; }
+      .fade18 { animation: fadein 0.4s 7.0s both; }
+      .fade19 { animation: fadein 0.4s 7.4s both; }
+      .fade20 { animation: fadein 0.4s 7.8s both; }
+      .fade21 { animation: fadein 0.4s 8.2s both; }
+      .fade22 { animation: fadein 0.4s 8.6s both; }
+      .fade23 { animation: fadein 0.4s 9.0s both; }
+      .fade24 { animation: fadein 0.4s 9.4s both; }
+      .fade25 { animation: fadein 0.4s 9.8s both; }
+      .fade26 { animation: fadein 0.4s 10.2s both; }
+      .fade27 { animation: fadein 0.4s 10.6s both; }
+      .fade28 { animation: fadein 0.4s 11.0s both; }
+      .pulse  { animation: pulse 2s 11.5s infinite; }
       @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
       @keyframes pulse  { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     </style>
   </defs>
 
   <!-- ── Background panels ─────────────────────────────────────────── -->
-  <rect x="10"  y="10" width="400" height="400" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
-  <rect x="450" y="10" width="400" height="400" rx="8" fill="#161b22" stroke="#238636" stroke-width="1"/>
+  <rect x="10"  y="10" width="400" height="800" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <rect x="450" y="10" width="400" height="800" rx="8" fill="#161b22" stroke="#238636" stroke-width="1"/>
 
   <!-- ── Panel titles ──────────────────────────────────────────────── -->
   <rect x="10"  y="10" width="400" height="36" rx="8" fill="#21262d"/>
@@ -69,27 +74,48 @@
   <text x="30" y="135" class="code fade4" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
   <text x="30" y="155" class="dim fade5">Agent: fixes bug ✓</text>
 
-  <!-- divider -->
   <line x1="30" y1="172" x2="390" y2="172" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade5"/>
 
   <!-- Day 2 -->
-  <text x="30" y="192" class="label fade6">DAY 2  (new session)</text>
+  <text x="30" y="192" class="label fade6">DAY 2</text>
   <text x="30" y="212" class="code fade7">You: "Add refresh token support"</text>
   <text x="30" y="232" class="dim fade8">Agent: "What's the auth config?"</text>
   <text x="30" y="252" class="code fade9" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
   <text x="30" y="272" class="dim fade10">Agent: implements ✓</text>
 
-  <!-- divider -->
   <line x1="30" y1="289" x2="390" y2="289" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade10"/>
 
   <!-- Day 3 -->
-  <text x="30" y="309" class="label fade11">DAY 3  (new session)</text>
-  <text x="30" y="329" class="code fade12">You: "Debug the token validation"</text>
+  <text x="30" y="309" class="label fade11">DAY 3</text>
+  <text x="30" y="329" class="code fade12">You: "Debug token validation"</text>
   <text x="30" y="349" class="dim fade13">Agent: "What's the auth config?"</text>
-  <text x="30" y="369" class="code fade14" fill="#f85149">You: "...again?!"</text>
+  <text x="30" y="369" class="code fade14" fill="#d29922">You: "RS256, 1h... AGAIN?!"</text>
+
+  <line x1="30" y1="386" x2="390" y2="386" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade14"/>
+
+  <!-- Day 4 -->
+  <text x="30" y="406" class="label fade15">DAY 4</text>
+  <text x="30" y="426" class="code fade16">You: "Add rate limiting"</text>
+  <text x="30" y="446" class="dim fade17">Agent: "What's the auth config?"</text>
+  <text x="30" y="466" class="code fade18" fill="#f85149">You: "..."</text>
+
+  <line x1="30" y1="483" x2="390" y2="483" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade18"/>
+
+  <!-- Day 5 -->
+  <text x="30" y="503" class="label fade19">DAY 5</text>
+  <text x="30" y="523" class="code fade20">You: "Fix session timeout"</text>
+  <text x="30" y="543" class="dim fade21">Agent: "What's the auth config?"</text>
+  <text x="30" y="563" class="code fade22" fill="#f85149">You: "I give up."</text>
+
+  <line x1="30" y1="580" x2="390" y2="580" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4" class="fade22"/>
+
+  <!-- Day 6-7 -->
+  <text x="30" y="600" class="label fade23">DAY 6-7</text>
+  <text x="30" y="620" class="dim fade24">You: stopped using the agent</text>
+  <text x="30" y="640" class="dim fade24">Context fatigue won.</text>
 
   <!-- frustration icon -->
-  <text x="340" y="375" font-size="28" class="fade14">😤</text>
+  <text x="340" y="720" font-size="48" class="fade25">😤</text>
 
   <!-- ══════════════════════════════════════════════════════════════════
        RIGHT PANEL — With mnemos
@@ -102,36 +128,76 @@
   <text x="470" y="135" class="code fade4" fill="#d29922">You: "RS256, 1h, see auth/config.go"</text>
   <text x="470" y="155" class="dim fade5">Agent: fixes bug ✓</text>
 
-  <!-- mnemos auto-store badge -->
-  <rect x="470" y="165" width="340" height="22" rx="4" fill="#1a2d1a" class="fade5"/>
-  <text x="480" y="180" class="label fade5" fill="#3fb950">⚡ mnemos stored automatically — quality: 0.91 | linked: auth/config.go</text>
+  <rect x="470" y="165" width="360" height="20" rx="4" fill="#1a2d1a" class="fade5"/>
+  <text x="480" y="179" class="label fade5" fill="#3fb950">⚡ mnemos auto-stored | quality: 0.91 | linked: auth/config.go</text>
 
-  <!-- divider -->
-  <line x1="470" y1="198" x2="830" y2="198" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade6"/>
+  <line x1="470" y1="196" x2="830" y2="196" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade6"/>
 
   <!-- Day 2 -->
-  <text x="470" y="218" class="label fade6">DAY 2  (new session)</text>
-  <text x="470" y="238" class="code fade7">You: "Add refresh token support"</text>
+  <text x="470" y="216" class="label fade6">DAY 2</text>
+  <text x="470" y="236" class="code fade7">You: "Add refresh token support"</text>
 
-  <!-- mnemos auto-inject badge -->
-  <rect x="470" y="248" width="340" height="22" rx="4" fill="#1a2d1a" class="fade8"/>
-  <text x="480" y="263" class="label fade8" fill="#58a6ff">🧠 mnemos injected: JWT RS256, 1h expiry — auth/config.go</text>
+  <rect x="470" y="246" width="360" height="20" rx="4" fill="#1a2d1a" class="fade8"/>
+  <text x="480" y="260" class="label fade8" fill="#58a6ff">🧠 mnemos injected: JWT RS256, 1h — auth/config.go</text>
 
-  <text x="470" y="285" class="dim fade9">Agent: "Using RS256 config from auth/config.go..."</text>
-  <text x="470" y="305" class="dim fade10">Agent: implements ✓  <tspan fill="#3fb950">(no re-explaining)</tspan></text>
+  <text x="470" y="280" class="dim fade9">Agent: "Using RS256 from auth/config.go..."</text>
+  <text x="470" y="300" class="dim fade10">Agent: implements ✓  <tspan fill="#3fb950">(no re-explaining)</tspan></text>
 
-  <!-- divider -->
-  <line x1="470" y1="322" x2="830" y2="322" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade10"/>
+  <line x1="470" y1="317" x2="830" y2="317" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade10"/>
 
   <!-- Day 3 -->
-  <text x="470" y="342" class="label fade11">DAY 3  (new session)</text>
-  <text x="470" y="362" class="code fade12">You: "Debug the token validation"</text>
+  <text x="470" y="337" class="label fade11">DAY 3</text>
+  <text x="470" y="357" class="code fade12">You: "Debug token validation"</text>
 
-  <!-- mnemos auto-inject badge -->
-  <rect x="470" y="372" width="340" height="22" rx="4" fill="#1a2d1a" class="fade13"/>
-  <text x="480" y="387" class="label fade13" fill="#58a6ff">🧠 mnemos injected: 3 memories, 380 tokens</text>
+  <rect x="470" y="367" width="360" height="20" rx="4" fill="#1a2d1a" class="fade13"/>
+  <text x="480" y="381" class="label fade13" fill="#58a6ff">🧠 mnemos injected: 2 memories, 280 tokens</text>
+
+  <text x="470" y="401" class="dim fade14">Agent: already knows config ✓</text>
+
+  <line x1="470" y1="418" x2="830" y2="418" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade14"/>
+
+  <!-- Day 4 — passive daemon kicks in -->
+  <text x="470" y="438" class="label fade15">DAY 4  (overnight)</text>
+
+  <rect x="470" y="448" width="360" height="20" rx="4" fill="#2d1a2d" class="fade16"/>
+  <text x="480" y="462" class="label fade16" fill="#bc8cff">🤖 passive daemon: detected 3 stale memories, backfilled 2 summaries</text>
+
+  <text x="470" y="482" class="code fade17">You: "Add rate limiting"</text>
+
+  <rect x="470" y="492" width="360" height="20" rx="4" fill="#1a2d1a" class="fade18"/>
+  <text x="480" y="506" class="label fade18" fill="#58a6ff">🧠 mnemos injected: 3 memories (cleaned by daemon)</text>
+
+  <text x="470" y="526" class="dim fade19">Agent: works with fresh context ✓</text>
+
+  <line x1="470" y1="543" x2="830" y2="543" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade19"/>
+
+  <!-- Day 5 -->
+  <text x="470" y="563" class="label fade20">DAY 5</text>
+  <text x="470" y="583" class="code fade21">You: "Fix session timeout"</text>
+
+  <rect x="470" y="593" width="360" height="20" rx="4" fill="#1a2d1a" class="fade22"/>
+  <text x="480" y="607" class="label fade22" fill="#58a6ff">🧠 mnemos injected: 4 memories, 420 tokens</text>
+
+  <text x="470" y="627" class="dim fade23">Agent: references prior work ✓</text>
+
+  <line x1="470" y1="644" x2="830" y2="644" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade23"/>
+
+  <!-- Day 6 -->
+  <text x="470" y="664" class="label fade24">DAY 6</text>
+  <text x="470" y="684" class="code fade25">You: "Refactor auth middleware"</text>
+
+  <rect x="470" y="694" width="360" height="20" rx="4" fill="#1a2d1a" class="fade26"/>
+  <text x="480" y="708" class="label fade26" fill="#58a6ff">🧠 mnemos injected: 5 memories, 510 tokens</text>
+
+  <text x="470" y="728" class="dim fade27">Agent: full context, zero re-explaining ✓</text>
+
+  <line x1="470" y1="745" x2="830" y2="745" stroke="#238636" stroke-width="1" stroke-dasharray="4,4" class="fade27"/>
+
+  <!-- Day 7 -->
+  <text x="470" y="765" class="label fade28">DAY 7</text>
+  <text x="470" y="785" class="code pulse green">You: still coding, agent still remembers</text>
 
   <!-- happy icon -->
-  <text x="780" y="395" font-size="28" class="fade14 pulse">🚀</text>
+  <text x="780" y="795" font-size="48" class="pulse">🚀</text>
 
 </svg>
