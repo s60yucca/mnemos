@@ -12,6 +12,7 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/config"
 	"github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
@@ -258,14 +259,25 @@ func (d *AutopilotDaemon) safeDetect(ctx context.Context, det Detector, projectI
 // runCycle discovers active projects and runs the pipeline for each that has new activity.
 func (d *AutopilotDaemon) runCycle(ctx context.Context) {
 	start := time.Now()
+	outcome := "ok"
+	totalFindings := 0
+
+	// Task 15: autopilot - use defer to ensure event emits even if cycle fails
+	defer func() {
+		observe.Feature("autopilot", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"outcome":     outcome,
+			"findings":    totalFindings,
+		})
+	}()
 
 	projects, err := d.mnemos.ListDistinctProjectIDs(ctx)
 	if err != nil {
 		d.logger.Warn("autopilot: failed to list projects", "err", err)
+		outcome = "error:list_projects"
 		return
 	}
 
-	total := 0
 	for _, project := range projects {
 		newest, err := d.mnemos.MaxCreatedAt(ctx, project)
 		if err != nil {
@@ -286,6 +298,7 @@ func (d *AutopilotDaemon) runCycle(ctx context.Context) {
 		findings, err := d.RunOnce(ctx, project, false)
 		if err != nil {
 			d.logger.Warn("autopilot: RunOnce failed", "project_id", project, "err", err)
+			outcome = "error:run_once"
 			continue
 		}
 
@@ -293,14 +306,14 @@ func (d *AutopilotDaemon) runCycle(ctx context.Context) {
 		d.lastRun[project] = time.Now()
 		d.mu.Unlock()
 
-		total += len(findings)
+		totalFindings += len(findings)
 	}
 
 	d.mu.Lock()
-	d.lastFindingCount = total
+	d.lastFindingCount = totalFindings
 	d.mu.Unlock()
 
-	d.logger.Info("autopilot run", "findings", total, "duration_ms", time.Since(start).Milliseconds(), "skipped", false)
+	d.logger.Info("autopilot run", "findings", totalFindings, "duration_ms", time.Since(start).Milliseconds(), "skipped", false)
 
 	// Persist state to disk so `mnemos autopilot status` can read it cross-process.
 	d.persistState()

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
@@ -66,6 +67,7 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 		return &HookOutput{Status: "skipped", Message: "no topic detected"}, nil
 	}
 	threshold := d.cfg.TopicSimilarityThreshold
+	topicChanged := false
 	if state.ActiveTopic != "" && !TopicChanged(newTopic, state.ActiveTopic, threshold) {
 		lastSearch := findLastSearchForTopic(state, newTopic)
 		if lastSearch != nil && time.Since(lastSearch.Timestamp) < d.cfg.SearchCooldown {
@@ -83,6 +85,9 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 			}
 			return &HookOutput{Status: "skipped", Message: "cooldown active for topic"}, nil
 		}
+	} else if state.ActiveTopic != "" {
+		// Topic changed - set flag for instrumentation
+		topicChanged = true
 	}
 	results, err := d.mnemos.Search(ctx, newTopic, state.ProjectID, d.cfg.PromptSearchLimit)
 	if err != nil {
@@ -102,6 +107,14 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	state.LastActivity = now
 	if err := stateManager.Save(state); err != nil {
 		slog.Warn("prompt_submit: failed to save state", "err", err)
+	}
+
+	// Task 18: topic_shift - fires when topic changes
+	if topicChanged {
+		observe.Feature("topic_shift", map[string]any{
+			"changed": true,
+			"topic":   newTopic,
+		})
 	}
 
 	// Build final context: search results + optional store nudge
@@ -269,8 +282,8 @@ func throttleNudge(nudge *storeNudge, state *SessionState) *storeNudge {
 		return nil
 	}
 	const (
-		minSessionAge  = 5 * time.Minute
-		nudgeCooldown  = 10 * time.Minute
+		minSessionAge = 5 * time.Minute
+		nudgeCooldown = 10 * time.Minute
 	)
 	if time.Since(state.StartedAt) < minSessionAge {
 		return nil // too early in session

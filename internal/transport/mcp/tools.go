@@ -123,6 +123,50 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		"project": storeReq.ProjectID,
 	})
 
+	// Instrument feature-specific events (Tasks 8-11)
+	// These features fire during Store() but we log them here (MCP-only instrumentation per Design Decision 1)
+
+	// Task 8: quality_gate - fires on every store
+	if result.Memory != nil {
+		action := "accept"
+		if !result.Created {
+			action = "merge"
+		} else if result.QualityNote != "" {
+			action = "fix"
+		}
+		observe.Feature("quality_gate", map[string]any{
+			"score":   result.Memory.QualityScore,
+			"action":  action,
+			"project": storeReq.ProjectID,
+		})
+	}
+
+	// Task 9: dedup - fires on every store (both hit and miss)
+	observe.Feature("dedup", map[string]any{
+		"hit":     !result.Created,
+		"project": storeReq.ProjectID,
+	})
+
+	// Task 10: summarize - fires when auto-summarization occurs
+	if result.Memory != nil && result.Memory.Summary != "" && storeReq.Summary == "" {
+		observe.Feature("summarize", map[string]any{
+			"memory_id": result.Memory.ID,
+			"method":    "auto",
+			"length":    len(result.Memory.Summary),
+		})
+	}
+
+	// Task 11: file_link - fires when file paths are detected
+	if result.Memory != nil && result.Memory.Metadata != nil {
+		if relatedFiles, ok := result.Memory.Metadata["related_files"]; ok && relatedFiles != "" {
+			fileCount := strings.Count(relatedFiles, ",") + 1
+			observe.Feature("file_link", map[string]any{
+				"memory_id": result.Memory.ID,
+				"count":     fileCount,
+			})
+		}
+	}
+
 	out, _ := json.Marshal(result)
 	return mcpText(string(out)), nil
 }
@@ -164,6 +208,14 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 		"project": projectID,
 		"mode":    mode,
 	})
+
+	// Task 12: mmr - fires on every search call (diversity filter is always applied)
+	if len(results) > 0 {
+		observe.Feature("mmr", map[string]any{
+			"selected": len(results),
+			"lambda":   0.7, // default lambda from assembler
+		})
+	}
 
 	for _, res := range results {
 		if res.Memory != nil {
@@ -279,6 +331,14 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 		"project": projectID,
 	})
 
+	// Task 12: mmr - fires on every context call (diversity filter is always applied)
+	if result != nil && len(result.Memories) > 0 {
+		observe.Feature("mmr", map[string]any{
+			"selected": len(result.Memories),
+			"lambda":   0.7, // default lambda from assembler
+		})
+	}
+
 	out, _ := json.Marshal(result)
 	return mcpText(string(out)), nil
 }
@@ -288,6 +348,13 @@ func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*
 	if err := s.mnemos.Maintain(ctx, projectID); err != nil {
 		return mcpError(err.Error()), nil
 	}
+
+	// Task 17: decay - fires on every maintenance operation
+	observe.Feature("decay", map[string]any{
+		"project": projectID,
+		"outcome": "ok",
+	})
+
 	return mcpText(`{"status":"ok","message":"maintenance complete"}`), nil
 }
 
@@ -374,6 +441,14 @@ func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*m
 		"previous_articles_weakened": weakenedCount,
 		"message":                    msg,
 	}
+
+	// Task 16: compile - fires on every compile operation
+	observe.Feature("compile", map[string]any{
+		"topic":     topic,
+		"sources":   sourceCount,
+		"output_id": articleID,
+		"outcome":   "ok",
+	})
 
 	out, _ := json.Marshal(outMap)
 	return mcpText(string(out)), nil
