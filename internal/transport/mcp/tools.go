@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
@@ -117,6 +118,11 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		return mcpError(err.Error()), nil
 	}
 
+	// Instrument MCP call for active day detection
+	observe.Feature("store_call", map[string]any{
+		"project": storeReq.ProjectID,
+	})
+
 	out, _ := json.Marshal(result)
 	return mcpText(string(out)), nil
 }
@@ -152,6 +158,12 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if err != nil {
 		return mcpError(err.Error()), nil
 	}
+
+	// Instrument MCP call for active day detection
+	observe.Feature("search_call", map[string]any{
+		"project": projectID,
+		"mode":    mode,
+	})
 
 	for _, res := range results {
 		if res.Memory != nil {
@@ -261,6 +273,11 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 	if err != nil {
 		return mcpError(err.Error()), nil
 	}
+
+	// Instrument MCP call for active day detection
+	observe.Feature("context_call", map[string]any{
+		"project": projectID,
+	})
 
 	out, _ := json.Marshal(result)
 	return mcpText(string(out)), nil
