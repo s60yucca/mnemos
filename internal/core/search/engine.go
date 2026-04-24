@@ -16,6 +16,7 @@ type ContextResult struct {
 	Memories    []*domain.Memory         `json:"memories"`
 	Relations   []*domain.MemoryRelation `json:"relations"`
 	TotalTokens int                      `json:"total_tokens"`
+	Message     string                   `json:"message,omitempty"` // Optional helpful message for cold start UX
 }
 
 // SearchEngine handles text, semantic, and hybrid search
@@ -124,10 +125,24 @@ func (e *SearchEngine) HybridSearch(ctx context.Context, query, projectID string
 //  2. MMR diversity filter — balances relevance vs. redundancy
 //  3. Adaptive packing — chooses full/summary/one-line detail level by budget
 func (e *SearchEngine) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool, openFiles []string) (*ContextResult, error) {
+	// DEBUG: Log incoming parameters
+	e.logger.Info("AssembleContext called",
+		"query", query,
+		"project_id", projectID,
+		"max_tokens", maxTokens)
+
 	candidates, err := e.HybridSearch(ctx, query, projectID, 20)
 	if err != nil {
+		e.logger.Error("HybridSearch failed", "error", err, "query", query, "project_id", projectID)
 		return nil, err
 	}
+
+	// DEBUG: Log candidate count
+	e.logger.Info("HybridSearch completed",
+		"query", query,
+		"project_id", projectID,
+		"candidate_count", len(candidates))
+
 	if len(candidates) == 0 {
 		return &ContextResult{}, nil
 	}

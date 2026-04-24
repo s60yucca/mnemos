@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mnemos-dev/mnemos/internal/benchmark"
 	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
@@ -113,6 +115,12 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		storeReq.Tags = splitTags(tags)
 	}
 
+	// CRITICAL: Mode OFF suppresses READS only, not WRITES
+	// Add "bench_off_day" tag when mode is OFF to prevent data loss
+	if s.benchMode == benchmark.BenchModeOff {
+		storeReq.Tags = append(storeReq.Tags, "bench_off_day")
+	}
+
 	result, err := s.mnemos.Store(ctx, storeReq)
 	if err != nil {
 		return mcpError(err.Error()), nil
@@ -168,6 +176,10 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 	}
 
 	out, _ := json.Marshal(result)
+
+	// Track MCP call for benchmark
+	s.trackMCPCall(storeReq.ProjectID, content, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -180,6 +192,13 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 	projectID := req.GetString("project_id", "")
 	limit := req.GetInt("limit", 10)
 	mode := req.GetString("mode", "hybrid")
+
+	// Bench mode OFF: return empty results (simulates no search)
+	if s.benchMode == benchmark.BenchModeOff {
+		emptyResult := "[]"
+		s.trackMCPCall(projectID, query, emptyResult)
+		return mcpText(emptyResult), nil
+	}
 
 	var results []*storage.SearchResult
 	var err error
@@ -230,6 +249,10 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	out, _ := json.Marshal(results)
+
+	// Track MCP call for benchmark
+	s.trackMCPCall(projectID, query, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -245,6 +268,10 @@ func (s *Server) handleGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 
 	out, _ := json.Marshal(mem)
+
+	// Track MCP call for benchmark (use empty project_id for get operations)
+	s.trackMCPCall("", id, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -255,8 +282,10 @@ func (s *Server) handleUpdate(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	updateReq := &domain.UpdateRequest{ID: id}
+	reqContent := id
 	if c := req.GetString("content", ""); c != "" {
 		updateReq.Content = &c
+		reqContent = c
 	}
 	if s2 := req.GetString("summary", ""); s2 != "" {
 		updateReq.Summary = &s2
@@ -271,6 +300,10 @@ func (s *Server) handleUpdate(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	out, _ := json.Marshal(mem)
+
+	// Track MCP call for benchmark (use empty project_id for update operations)
+	s.trackMCPCall("", reqContent, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -283,7 +316,13 @@ func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if err := s.mnemos.Delete(ctx, id); err != nil {
 		return mcpError(err.Error()), nil
 	}
-	return mcpText(fmt.Sprintf(`{"deleted":true,"id":%q}`, id)), nil
+
+	result := fmt.Sprintf(`{"deleted":true,"id":%q}`, id)
+
+	// Track MCP call for benchmark (use empty project_id for delete operations)
+	s.trackMCPCall("", id, result)
+
+	return mcpText(result), nil
 }
 
 func (s *Server) handleRelate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -308,6 +347,11 @@ func (s *Server) handleRelate(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	out, _ := json.Marshal(rel)
+
+	// Track MCP call for benchmark (use empty project_id for relate operations)
+	reqContent := fmt.Sprintf("%s->%s:%s", sourceID, targetID, relType)
+	s.trackMCPCall("", reqContent, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -321,9 +365,43 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 	maxTokens := req.GetInt("max_tokens", 4000)
 	includeRelations := req.GetBool("include_relations", false)
 
+	// DEBUG: Log incoming parameters to diagnose empty context bug
+	fmt.Fprintf(os.Stderr, "[DEBUG] handleContext: query=%q project_id=%q max_tokens=%d include_relations=%v\n",
+		query, projectID, maxTokens, includeRelations)
+
+	// Bench mode OFF: return empty memories (simulates no injection)
+	if s.benchMode == benchmark.BenchModeOff {
+		emptyResult := map[string]any{
+			"memories":     []any{},
+			"total_tokens": 0,
+			"relations":    []any{},
+		}
+		out, _ := json.Marshal(emptyResult)
+		s.trackMCPCall(projectID, query, string(out))
+		return mcpText(string(out)), nil
+	}
+
 	result, err := s.mnemos.AssembleContext(ctx, query, projectID, maxTokens, includeRelations, nil)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] AssembleContext failed: %v (query=%q project_id=%q)\n", err, query, projectID)
 		return mcpError(err.Error()), nil
+	}
+
+	// DEBUG: Log result to diagnose empty context bug
+	memCount := 0
+	if result != nil && result.Memories != nil {
+		memCount = len(result.Memories)
+	}
+	fmt.Fprintf(os.Stderr, "[DEBUG] handleContext result: query=%q project_id=%q memory_count=%d total_tokens=%d\n",
+		query, projectID, memCount, result.TotalTokens)
+
+	// Cold start UX: Add helpful message when no memories found
+	if result != nil && len(result.Memories) == 0 {
+		projectLabel := "this workspace"
+		if projectID != "" {
+			projectLabel = fmt.Sprintf("project '%s'", projectID)
+		}
+		result.Message = fmt.Sprintf("No memories found for %s. Memories will be available in future sessions after you store them during this session.", projectLabel)
 	}
 
 	// Instrument MCP call for active day detection
@@ -340,6 +418,10 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	out, _ := json.Marshal(result)
+
+	// Track MCP call for benchmark
+	s.trackMCPCall(projectID, query, string(out))
+
 	return mcpText(string(out)), nil
 }
 
@@ -355,7 +437,12 @@ func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*
 		"outcome": "ok",
 	})
 
-	return mcpText(`{"status":"ok","message":"maintenance complete"}`), nil
+	result := `{"status":"ok","message":"maintenance complete"}`
+
+	// Track MCP call for benchmark
+	s.trackMCPCall(projectID, "maintain", result)
+
+	return mcpText(result), nil
 }
 
 func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -451,6 +538,11 @@ func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*m
 	})
 
 	out, _ := json.Marshal(outMap)
+
+	// Track MCP call for benchmark
+	reqContent := fmt.Sprintf("topic:%s content:%s", topic, content)
+	s.trackMCPCall(projectID, reqContent, string(out))
+
 	return mcpText(string(out)), nil
 }
 

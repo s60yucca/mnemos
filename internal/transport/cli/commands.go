@@ -290,6 +290,7 @@ func newServeCmd(m *core.Mnemos, version string) *cobra.Command {
 			}
 			// MCP stdio mode
 			mcpServer := mcptransport.NewServer(m, version)
+			defer mcpServer.Shutdown()
 			return mcpServer.ServeStdio(context.Background())
 		},
 	}

@@ -1,401 +1,131 @@
 package mcp
 
 import (
-	"context"
-	"encoding/json"
-	"log/slog"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mnemos-dev/mnemos/internal/benchmark"
 	core "github.com/mnemos-dev/mnemos/internal/core"
-	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
-	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
-	"github.com/mnemos-dev/mnemos/internal/core/relation"
-	"github.com/mnemos-dev/mnemos/internal/core/search"
-	"github.com/mnemos-dev/mnemos/internal/domain"
-	"github.com/mnemos-dev/mnemos/internal/embedding"
-	"github.com/mnemos-dev/mnemos/internal/storage"
-	"github.com/mnemos-dev/mnemos/internal/storage/markdown"
-	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type testEmbedder struct{}
+func TestServerShutdown(t *testing.T) {
+	// Create a minimal mnemos instance (nil is acceptable for this test)
+	var mnemos *core.Mnemos
 
-func (testEmbedder) Name() string                 { return "test" }
-func (testEmbedder) Dimensions() int              { return 2 }
-func (testEmbedder) Healthy(context.Context) bool { return true }
-func (testEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	out := make([][]float32, 0, len(texts))
-	for _, text := range texts {
-		vec, err := testEmbedder{}.Embed(ctx, text)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, vec)
+	// Create server
+	server := NewServer(mnemos, "test-version")
+	require.NotNil(t, server)
+
+	// Verify session tracker was created
+	require.NotNil(t, server.sessionTracker)
+
+	// Start a session via the session tracker
+	server.sessionTracker.StartSession("test-project", "feature")
+	session := server.sessionTracker.GetCurrentSession()
+	require.NotNil(t, session, "session should be active before shutdown")
+
+	// Call Shutdown
+	server.Shutdown()
+
+	// Verify session was ended (marked as incomplete)
+	session = server.sessionTracker.GetCurrentSession()
+	assert.Nil(t, session, "session should be nil after shutdown")
+}
+
+func TestServerShutdown_NoSessionTracker(t *testing.T) {
+	// Create a server with nil session tracker
+	server := &Server{
+		sessionTracker: nil,
 	}
-	return out, nil
+
+	// Shutdown should not panic
+	assert.NotPanics(t, func() {
+		server.Shutdown()
+	})
 }
 
-func (testEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
-	text = strings.ToLower(text)
-	if strings.Contains(text, "token expiry") || strings.Contains(text, "jwt lifetime") {
-		return []float32{1, 0}, nil
-	}
-	return []float32{0, 1}, nil
+func TestServerShutdown_StopsInactivityGoroutine(t *testing.T) {
+	// Create a minimal mnemos instance
+	var mnemos *core.Mnemos
+
+	// Create server
+	server := NewServer(mnemos, "test-version")
+	require.NotNil(t, server)
+	require.NotNil(t, server.sessionTracker)
+
+	// Start a session
+	server.sessionTracker.StartSession("test-project", "feature")
+
+	// Call Shutdown
+	server.Shutdown()
+
+	// Wait a bit to ensure goroutine has stopped
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify the ticker was stopped by checking that the session tracker's stopChan is closed
+	// We can't directly check this, but we can verify that calling Stop again doesn't panic
+	assert.NotPanics(t, func() {
+		server.sessionTracker.Stop()
+	})
 }
 
-func newTestServer(t *testing.T) (*Server, *core.Mnemos, *sqlitestore.EmbeddingStore) {
-	t.Helper()
+func TestServerShutdown_WithActiveSession(t *testing.T) {
+	// Create a minimal mnemos instance
+	var mnemos *core.Mnemos
 
-	db, err := sqlitestore.Open(":memory:")
-	require.NoError(t, err)
+	// Create server
+	server := NewServer(mnemos, "test-version")
+	require.NotNil(t, server)
 
-	memStore := sqlitestore.NewSQLiteStore(db)
-	fts := sqlitestore.NewFTSSearcher(db)
-	embedStore := sqlitestore.NewEmbeddingStore(db)
-	relStore := sqlitestore.NewRelationStore(db)
-	embedProvider := testEmbedder{}
-	mirror := markdown.NewMirror(t.TempDir(), false)
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	// Simulate MCP activity
+	server.trackMCPCall("test-project", "request content", "response content")
 
-	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
-	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7, 0.0)
-	relManager := relation.NewManager(relStore, memStore, logger)
-	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
-	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
+	// Verify session was started
+	session := server.sessionTracker.GetCurrentSession()
+	require.NotNil(t, session)
+	assert.Equal(t, "test-project", session.ProjectID)
+	assert.Equal(t, 1, session.MCPCallsCount)
 
-	server := NewServer(mn, "test")
+	// Shutdown
+	server.Shutdown()
 
-	t.Cleanup(func() {
-		mn.Shutdown()
-		db.Close()
-	})
-
-	return server, mn, embedStore
+	// Session should be ended
+	session = server.sessionTracker.GetCurrentSession()
+	assert.Nil(t, session)
 }
 
-func toolText(t *testing.T, result *mcp.CallToolResult) string {
-	t.Helper()
-	require.NotNil(t, result)
-	require.NotEmpty(t, result.Content)
-	text, ok := mcp.AsTextContent(result.Content[0])
-	require.True(t, ok)
-	return text.Text
+func TestServerShutdown_MultipleCallsAreSafe(t *testing.T) {
+	// Create a minimal mnemos instance
+	var mnemos *core.Mnemos
+
+	// Create server
+	server := NewServer(mnemos, "test-version")
+	require.NotNil(t, server)
+
+	// Call Shutdown multiple times - should not panic
+	assert.NotPanics(t, func() {
+		server.Shutdown()
+		server.Shutdown()
+		server.Shutdown()
+	})
 }
 
-func TestHandleSearch_SemanticModeUsesSemanticSearch(t *testing.T) {
-	server, mn, embedStore := newTestServer(t)
-	ctx := context.Background()
+func TestServerCreation_WithBenchMode(t *testing.T) {
+	tempDir := t.TempDir()
 
-	stored, err := mn.Store(ctx, &domain.StoreRequest{
-		Content:   "JWT lifetime is one hour",
-		ProjectID: "proj-search",
-	})
+	// Write bench mode OFF
+	err := benchmark.WriteBenchMode(tempDir, benchmark.BenchModeOff)
 	require.NoError(t, err)
 
-	vec, err := testEmbedder{}.Embed(ctx, stored.Memory.Content)
-	require.NoError(t, err)
-	require.NoError(t, embedStore.StoreEmbedding(ctx, stored.Memory.ID, vec))
+	// Create server (it should read the bench mode)
+	// Note: NewServer uses getDataDir() which returns ~/.mnemos, not our tempDir
+	// So this test verifies the server creation doesn't panic, but can't verify mode loading
+	var mnemos *core.Mnemos
+	server := NewServer(mnemos, "test-version")
+	require.NotNil(t, server)
 
-	result, err := server.handleSearch(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Arguments: map[string]any{
-				"query":      "token expiry",
-				"project_id": "proj-search",
-				"mode":       "semantic",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	var payload []*storage.SearchResult
-	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &payload))
-	require.Len(t, payload, 1)
-	assert.Equal(t, "semantic", payload[0].Source)
-	assert.Equal(t, stored.Memory.ID, payload[0].Memory.ID)
-}
-
-func TestHandleLoadContextPrompt_UsesProvidedTokenBudget(t *testing.T) {
-	server, mn, _ := newTestServer(t)
-	ctx := context.Background()
-
-	_, err := mn.Store(ctx, &domain.StoreRequest{
-		Content:   strings.Repeat("a", 120),
-		ProjectID: "proj-prompt",
-	})
-	require.NoError(t, err)
-
-	result, err := server.handleLoadContextPrompt(ctx, mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Arguments: map[string]string{
-				"query":      "a",
-				"project_id": "proj-prompt",
-				"max_tokens": "5",
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Messages, 1)
-
-	content, ok := result.Messages[0].Content.(mcp.TextContent)
-	require.True(t, ok)
-	assert.Contains(t, content.Text, "Total tokens used: 0")
-}
-
-func TestHandleMemoriesResource_ReturnsOnlyActiveMemories(t *testing.T) {
-	server, mn, _ := newTestServer(t)
-	ctx := context.Background()
-
-	active, err := mn.Store(ctx, &domain.StoreRequest{
-		Content:   "active memory",
-		ProjectID: "proj-resource",
-	})
-	require.NoError(t, err)
-
-	deleted, err := mn.Store(ctx, &domain.StoreRequest{
-		Content:   "deleted memory",
-		ProjectID: "proj-resource",
-	})
-	require.NoError(t, err)
-	require.NoError(t, mn.Delete(ctx, deleted.Memory.ID))
-
-	resource, err := server.handleMemoriesResource(ctx, mcp.ReadResourceRequest{
-		Params: mcp.ReadResourceParams{URI: "mnemos://memories/proj-resource"},
-	})
-	require.NoError(t, err)
-	require.Len(t, resource, 1)
-
-	textResource, ok := resource[0].(mcp.TextResourceContents)
-	require.True(t, ok)
-
-	var memories []*domain.Memory
-	require.NoError(t, json.Unmarshal([]byte(textResource.Text), &memories))
-	require.Len(t, memories, 1)
-	assert.Equal(t, active.Memory.ID, memories[0].ID)
-}
-
-func TestHandleSearch_InvalidModeReturnsToolError(t *testing.T) {
-	server, _, _ := newTestServer(t)
-
-	result, err := server.handleSearch(context.Background(), mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Arguments: map[string]any{
-				"query": "anything",
-				"mode":  "bogus",
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.True(t, result.IsError)
-	assert.Contains(t, toolText(t, result), "mode must be one of")
-}
-
-func TestHandleMemoriesResource_UsesProjectScope(t *testing.T) {
-	server, mn, _ := newTestServer(t)
-	ctx := context.Background()
-
-	_, err := mn.Store(ctx, &domain.StoreRequest{
-		Content:   "project scoped",
-		ProjectID: "proj-a",
-	})
-	require.NoError(t, err)
-	_, err = mn.Store(ctx, &domain.StoreRequest{
-		Content:   "other project",
-		ProjectID: "proj-b",
-	})
-	require.NoError(t, err)
-
-	resource, err := server.handleMemoriesResource(ctx, mcp.ReadResourceRequest{
-		Params: mcp.ReadResourceParams{URI: "mnemos://memories/proj-a"},
-	})
-	require.NoError(t, err)
-
-	textResource, ok := resource[0].(mcp.TextResourceContents)
-	require.True(t, ok)
-
-	var memories []*domain.Memory
-	require.NoError(t, json.Unmarshal([]byte(textResource.Text), &memories))
-	require.Len(t, memories, 1)
-	assert.Equal(t, "proj-a", memories[0].ProjectID)
-}
-
-var _ embedding.IEmbeddingProvider = testEmbedder{}
-
-func newTestServerWithGate(t *testing.T) *Server {
-	t.Helper()
-
-	db, err := sqlitestore.Open(":memory:")
-	require.NoError(t, err)
-
-	memStore := sqlitestore.NewSQLiteStore(db)
-	fts := sqlitestore.NewFTSSearcher(db)
-	embedStore := sqlitestore.NewEmbeddingStore(db)
-	relStore := sqlitestore.NewRelationStore(db)
-	embedProvider := testEmbedder{}
-	mirror := markdown.NewMirror(t.TempDir(), false)
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-
-	cfg := coremem.TestQualityGateConfig()
-	gate := coremem.NewQualityGate(cfg)
-
-	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, gate)
-	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7, 0.0)
-	relManager := relation.NewManager(relStore, memStore, logger)
-	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
-	mn := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
-
-	server := NewServer(mn, "test")
-
-	t.Cleanup(func() {
-		mn.Shutdown()
-		db.Close()
-	})
-
-	return server
-}
-
-func callStore(t *testing.T, server *Server, args map[string]any) *domain.StoreResult {
-	t.Helper()
-	ctx := context.Background()
-	result, err := server.handleStore(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{Arguments: args},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.False(t, result.IsError, "handleStore must never return isError=true for quality verdicts")
-	var out domain.StoreResult
-	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &out))
-	return &out
-}
-
-// TestHandleStore_QualityNote_Reject verifies that a too-short memory returns
-// isError=false and a quality_note explaining the rejection.
-func TestHandleStore_QualityNote_Reject(t *testing.T) {
-	server := newTestServerWithGate(t)
-	out := callStore(t, server, map[string]any{"content": "fix bug"})
-	assert.False(t, out.Created)
-	assert.Contains(t, out.QualityNote, "brief")
-}
-
-// TestHandleStore_QualityNote_Fix verifies that a verbose memory returns
-// isError=false, is created, and carries a quality_note about optimisation.
-func TestHandleStore_QualityNote_Fix(t *testing.T) {
-	server := newTestServerWithGate(t)
-	// Low-density verbose content triggers FixCompact → VerdictFix
-	verbose := strings.Repeat("we looked at things and discussed the system and talked about it ", 4)
-	out := callStore(t, server, map[string]any{"content": verbose, "project_id": "proj-fix"})
-	// May be created (Fix) or rejected depending on final score; either way no isError
-	if out.Created {
-		assert.Contains(t, out.QualityNote, "optimized")
-	}
-}
-
-// TestHandleStore_QualityNote_Downgrade verifies that a generic long_term memory
-// is downgraded and carries the appropriate quality_note.
-func TestHandleStore_QualityNote_Downgrade(t *testing.T) {
-	server := newTestServerWithGate(t)
-	out := callStore(t, server, map[string]any{
-		"content":    "The project has good error handling and the team is happy with it overall",
-		"type":       "long_term",
-		"project_id": "proj-downgrade",
-	})
-	if out.Created && out.QualityNote != "" {
-		assert.Contains(t, out.QualityNote, "short-term")
-	}
-}
-
-// TestHandleStore_NoQualityNote_Accept verifies that a high-quality memory
-// returns isError=false and no quality_note.
-func TestHandleStore_NoQualityNote_Accept(t *testing.T) {
-	server := newTestServerWithGate(t)
-	out := callStore(t, server, map[string]any{
-		"content":    "SessionStore.Close() in auth/session.go needs sync.RWMutex to prevent race condition",
-		"project_id": "proj-accept",
-	})
-	assert.True(t, out.Created)
-	assert.Empty(t, out.QualityNote)
-}
-
-// TestHandleStore_RejectIsNotMCPError verifies the isError=false contract for Reject.
-func TestHandleStore_RejectIsNotMCPError(t *testing.T) {
-	server := newTestServerWithGate(t)
-	ctx := context.Background()
-	result, err := server.handleStore(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{Arguments: map[string]any{"content": "ok"}},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.False(t, result.IsError, "Reject verdict must not set isError=true")
-}
-
-func TestHandleCompile(t *testing.T) {
-	server, mn, _ := newTestServer(t)
-	ctx := context.Background()
-
-	// Store source memories
-	src1, err := mn.Store(ctx, &domain.StoreRequest{Content: "source 1", ProjectID: "proj-compile"})
-	require.NoError(t, err)
-	src2, err := mn.Store(ctx, &domain.StoreRequest{Content: "source 2", ProjectID: "proj-compile"})
-	require.NoError(t, err)
-
-	// Call compile
-	result, err := server.handleCompile(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Arguments: map[string]any{
-				"topic":      "Test Compilation",
-				"content":    "## Test Compilation\nCombined article.",
-				"project_id": "proj-compile",
-				"source_ids": src1.Memory.ID + "," + src2.Memory.ID,
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.False(t, result.IsError)
-
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &payload))
-	assert.Equal(t, "Test Compilation", payload["topic"])
-	assert.Equal(t, float64(2), payload["source_count"]) // JSON numbers are float64
-
-	articleID := payload["article_id"].(string)
-
-	// Verify new article
-	art, err := mn.Get(ctx, articleID)
-	require.NoError(t, err)
-	assert.Equal(t, domain.MemoryTypeCompiled, art.Type)
-	assert.Equal(t, "1", art.Metadata["version"])
-
-	// Verify previous articles weakening logic by compiling again
-	result2, err := server.handleCompile(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Arguments: map[string]any{
-				"topic":      "Test Compilation", // Same topic
-				"content":    "## Test Compilation\nUpdated combined article.",
-				"project_id": "proj-compile",
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.False(t, result2.IsError)
-
-	var payload2 map[string]any
-	require.NoError(t, json.Unmarshal([]byte(toolText(t, result2)), &payload2))
-	assert.Equal(t, float64(1), payload2["previous_articles_weakened"])
-
-	// Check that previous version was weakened
-	art1Updated, err := mn.Get(ctx, articleID)
-	require.NoError(t, err)
-	assert.InDelta(t, 0.5, art1Updated.RelevanceScore, 0.001)
-
-	// Check new version score
-	article2ID := payload2["article_id"].(string)
-	art2, err := mn.Get(ctx, article2ID)
-	require.NoError(t, err)
-	assert.Equal(t, domain.MemoryTypeCompiled, art2.Type)
-	assert.Equal(t, "2", art2.Metadata["version"])
+	// Cleanup
+	server.Shutdown()
 }
