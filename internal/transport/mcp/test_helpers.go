@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -38,7 +39,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, string) {
 	memManager := coremem.NewManager(
 		memStore, embedStore, embedProvider, nil, // nil mirror for tests
 		0.85, 0.90, // dedup thresholds
-		nil, // nil logger for tests
+		slog.Default(), // use default logger for tests
 		coremem.NewQualityGate(config.QualityGateConfig{
 			Enabled:  false, // Disable quality gate for tests
 			MinWords: 1,
@@ -46,7 +47,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, string) {
 		}),
 	)
 
-	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, nil, 0.7, 1.5)
+	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, slog.Default(), 0.7, 1.5)
 	relManager := relation.NewManager(relStore, memStore, nil)
 
 	// Create mnemos facade

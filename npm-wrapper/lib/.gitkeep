@@ -1,0 +1,6 @@
+# Placeholder for lib directory
+# Will contain:
+# - platform.js (platform detection)
+# - download.js (binary downloader)
+# - cache.js (cache management)
+# - execute.js (binary executor)

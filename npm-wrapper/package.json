@@ -1,0 +1,45 @@
+{
+  "name": "@s60yucca/mnemos",
+  "version": "1.1.10",
+  "description": "Cross-platform NPM wrapper for mnemos autopilot knowledge base system",
+  "main": "cli.js",
+  "bin": {
+    "mnemos": "./cli.js"
+  },
+  "scripts": {
+    "test": "jest --passWithNoTests",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s60yucca/mnemos"
+  },
+  "keywords": [
+    "mnemos",
+    "mcp",
+    "memory",
+    "autopilot",
+    "knowledge-base",
+    "wrapper",
+    "ai",
+    "agent"
+  ],
+  "author": "s60yucca",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "config": {
+    "binarySource": {
+      "owner": "s60yucca",
+      "repo": "mnemos"
+    }
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nock": "^13.5.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5"
+  }
+}

@@ -16,7 +16,6 @@ import (
 type Server struct {
 	mnemos         *core.Mnemos
 	mcpServer      *server.MCPServer
-	benchMode      benchmark.BenchMode
 	dataDir        string
 	sessionTracker *benchmark.SessionTracker
 }
@@ -25,12 +24,6 @@ type Server struct {
 func NewServer(mnemos *core.Mnemos, version string) *Server {
 	// Get data directory
 	dataDir := getDataDir()
-
-	// Read bench mode
-	benchMode, err := benchmark.ReadBenchMode(dataDir)
-	if err != nil {
-		benchMode = benchmark.BenchModeOn // Default to ON
-	}
 
 	// Create session tracker
 	sessionTracker, err := benchmark.NewSessionTracker(dataDir)
@@ -41,7 +34,6 @@ func NewServer(mnemos *core.Mnemos, version string) *Server {
 
 	s := &Server{
 		mnemos:         mnemos,
-		benchMode:      benchMode,
 		dataDir:        dataDir,
 		sessionTracker: sessionTracker,
 	}
@@ -78,6 +70,17 @@ func (s *Server) trackMCPCall(projectID string, reqContent string, respContent s
 	if s.sessionTracker != nil {
 		s.sessionTracker.OnMCPCall(projectID, reqContent, respContent)
 	}
+}
+
+// currentBenchMode reads bench mode fresh from disk on every call.
+// This ensures mode changes via `mnemos bench mode on/off` take effect
+// immediately without requiring an MCP server restart.
+func (s *Server) currentBenchMode() benchmark.BenchMode {
+	mode, err := benchmark.ReadBenchMode(s.dataDir)
+	if err != nil {
+		return benchmark.BenchModeOn // default to ON
+	}
+	return mode
 }
 
 func mcpError(msg string) *mcp.CallToolResult {

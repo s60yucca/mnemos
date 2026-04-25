@@ -19,3 +19,9 @@ scripts/demo.sh
 scripts/demo.tape
 scripts/README.md
 scripts/RECORDING.md
+DEBUG_TESTING_INSTRUCTIONS.md
+BENCHMARK_VERIFICATION_RESULTS.md
+DOGFOOD_START_GUIDE.md
+npm-wrapper/BINARY_VERIFICATION.md
+npm-wrapper/WINDOWS_PATH_VERIFICATION.md
+npm-wrapper/TASK_1_SUMMARY.md

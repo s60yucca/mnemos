@@ -19,21 +19,14 @@ import (
 func newTestServerWithBenchMode(t *testing.T, benchMode benchmark.BenchMode) (*Server, string) {
 	t.Helper()
 
-	// Create temp data directory for bench_mode file
-	dataDir := t.TempDir()
-
-	// Write bench mode to file
-	err := benchmark.WriteBenchMode(dataDir, benchMode)
-	require.NoError(t, err)
-
 	// Create test server
 	server, _, _ := newTestServer(t)
 
-	// Override the benchMode and dataDir fields
-	server.benchMode = benchMode
-	server.dataDir = dataDir
+	// Write bench mode to the server's dataDir so currentBenchMode() picks it up
+	err := benchmark.WriteBenchMode(server.dataDir, benchMode)
+	require.NoError(t, err)
 
-	return server, dataDir
+	return server, server.dataDir
 }
 
 // TestModeOFF_ContextReturnsEmpty verifies that mnemos_context returns empty results when mode is OFF
@@ -41,10 +34,14 @@ func TestModeOFF_ContextReturnsEmpty(t *testing.T) {
 	server, _ := newTestServerWithBenchMode(t, benchmark.BenchModeOff)
 	ctx := context.Background()
 
-	// Store a memory first (should still work in OFF mode)
-	_, err := server.mnemos.Store(ctx, &domain.StoreRequest{
-		Content:   "JWT authentication uses tokens in auth/jwt.go",
-		ProjectID: "test-project",
+	// Store a memory first via MCP handler (still works in OFF mode)
+	_, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"content":    "JWT authentication uses tokens in auth/jwt.go",
+				"project_id": "test-project",
+			},
+		},
 	})
 	require.NoError(t, err)
 
@@ -79,10 +76,14 @@ func TestModeOFF_SearchReturnsEmpty(t *testing.T) {
 	server, _ := newTestServerWithBenchMode(t, benchmark.BenchModeOff)
 	ctx := context.Background()
 
-	// Store a memory first
-	_, err := server.mnemos.Store(ctx, &domain.StoreRequest{
-		Content:   "Session management in auth/session.go",
-		ProjectID: "test-project",
+	// Store a memory first via MCP handler
+	_, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"content":    "Session management in auth/session.go",
+				"project_id": "test-project",
+			},
+		},
 	})
 	require.NoError(t, err)
 
@@ -150,13 +151,17 @@ func TestModeON_NormalBehavior(t *testing.T) {
 	server, _ := newTestServerWithBenchMode(t, benchmark.BenchModeOn)
 	ctx := context.Background()
 
-	// Store a memory
-	storeResult, err := server.mnemos.Store(ctx, &domain.StoreRequest{
-		Content:   "JWT authentication uses tokens in auth/jwt.go",
-		ProjectID: "test-project",
+	// Store a memory via MCP handler
+	storeResult, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"content":    "JWT authentication uses tokens in auth/jwt.go",
+				"project_id": "test-project",
+			},
+		},
 	})
 	require.NoError(t, err)
-	require.True(t, storeResult.Created)
+	require.False(t, storeResult.IsError)
 
 	// Test mnemos_context returns results
 	contextResult, err := server.handleContext(ctx, mcp.CallToolRequest{
@@ -282,6 +287,78 @@ func TestModeChangeEventEmission(t *testing.T) {
 	mode, err = benchmark.ReadBenchMode(dataDir)
 	require.NoError(t, err)
 	assert.Equal(t, benchmark.BenchModeOn, mode)
+}
+
+// TestModeChange_NoRestart verifies that bench mode changes take effect immediately
+// on the SAME running server without requiring a restart.
+// This is the fix for the bench mode caching bug discovered in Day 1 dogfood.
+func TestModeChange_NoRestart(t *testing.T) {
+	// Start server with mode ON
+	server, dataDir := newTestServerWithBenchMode(t, benchmark.BenchModeOn)
+	ctx := context.Background()
+
+	// Store a memory while ON
+	storeResult, err := server.handleStore(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"content":    "Important architecture decision",
+				"project_id": "test-project",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, storeResult.IsError)
+
+	// Context should return results in ON mode
+	ctxResult1, err := server.handleContext(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"query":      "architecture",
+				"project_id": "test-project",
+			},
+		},
+	})
+	require.NoError(t, err)
+	var data1 map[string]any
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, ctxResult1)), &data1))
+	memories1, _ := data1["memories"].([]any)
+	assert.NotEmpty(t, memories1, "ON mode: context should return memories")
+
+	// --- Switch mode to OFF without restarting the server ---
+	require.NoError(t, benchmark.WriteBenchMode(dataDir, benchmark.BenchModeOff))
+
+	// Context should now return empty on the SAME server instance
+	ctxResult2, err := server.handleContext(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"query":      "architecture",
+				"project_id": "test-project",
+			},
+		},
+	})
+	require.NoError(t, err)
+	var data2 map[string]any
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, ctxResult2)), &data2))
+	memories2, _ := data2["memories"].([]any)
+	assert.Empty(t, memories2, "OFF mode: context should return empty without restart")
+
+	// --- Switch back to ON ---
+	require.NoError(t, benchmark.WriteBenchMode(dataDir, benchmark.BenchModeOn))
+
+	// Context should return results again on the SAME server instance
+	ctxResult3, err := server.handleContext(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: map[string]any{
+				"query":      "architecture",
+				"project_id": "test-project",
+			},
+		},
+	})
+	require.NoError(t, err)
+	var data3 map[string]any
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, ctxResult3)), &data3))
+	memories3, _ := data3["memories"].([]any)
+	assert.NotEmpty(t, memories3, "ON mode again: context should return memories without restart")
 }
 
 // TestModeToggle_EndToEnd simulates a complete benchmark workflow

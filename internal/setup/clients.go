@@ -95,4 +95,12 @@ var Clients = map[string]ClientConfig{
 			GlobalPath: ".gemini/settings.json",
 		},
 	},
+	"codex": {
+		Name:  "codex",
+		Files: []FileMapping{},
+		MCPConfig: MCPMapping{
+			LocalPath:  "",
+			GlobalPath: ".codex/config.toml",
+		},
+	},
 }

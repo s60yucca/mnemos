@@ -117,7 +117,7 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 
 	// CRITICAL: Mode OFF suppresses READS only, not WRITES
 	// Add "bench_off_day" tag when mode is OFF to prevent data loss
-	if s.benchMode == benchmark.BenchModeOff {
+	if s.currentBenchMode() == benchmark.BenchModeOff {
 		storeReq.Tags = append(storeReq.Tags, "bench_off_day")
 	}
 
@@ -194,7 +194,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 	mode := req.GetString("mode", "hybrid")
 
 	// Bench mode OFF: return empty results (simulates no search)
-	if s.benchMode == benchmark.BenchModeOff {
+	if s.currentBenchMode() == benchmark.BenchModeOff {
 		emptyResult := "[]"
 		s.trackMCPCall(projectID, query, emptyResult)
 		return mcpText(emptyResult), nil
@@ -370,7 +370,7 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 		query, projectID, maxTokens, includeRelations)
 
 	// Bench mode OFF: return empty memories (simulates no injection)
-	if s.benchMode == benchmark.BenchModeOff {
+	if s.currentBenchMode() == benchmark.BenchModeOff {
 		emptyResult := map[string]any{
 			"memories":     []any{},
 			"total_tokens": 0,

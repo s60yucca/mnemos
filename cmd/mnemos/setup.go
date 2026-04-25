@@ -26,6 +26,7 @@ func newSetupCmd() *cobra.Command {
 		newSetupClientCmd("kiro"),
 		newSetupClientCmd("cursor"),
 		newSetupClientCmd("gemini-cli"),
+		newSetupClientCmd("codex"),
 	)
 
 	return cmd
@@ -119,7 +120,7 @@ func runUninstall(clientName string, global bool) error {
 func runSetup(clientName string, force, global bool) error {
 	clientCfg, ok := setup.Clients[clientName]
 	if !ok {
-		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli", clientName)
+		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli, codex", clientName)
 	}
 
 	// Resolve the absolute binary path early — used for hook commands and plist ProgramArguments.
@@ -178,6 +179,42 @@ func runSetup(clientName string, force, global bool) error {
 				return fmt.Errorf("write %s: %w", targetPath, err)
 			}
 		}
+	}
+
+	// Merge MCP config — codex uses TOML format
+	if clientName == "codex" {
+		// Codex only supports global configuration
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve home dir: %w", err)
+		}
+
+		// Derive project ID
+		projectID, err := setup.DeriveProjectID("")
+		if err != nil {
+			return fmt.Errorf("derive project ID: %w", err)
+		}
+
+		configPath := filepath.Join(home, ".codex", "config.toml")
+		changed, err := setup.MergeCodexTOML(configPath, binPath, projectID, force)
+		if err != nil {
+			return fmt.Errorf("merge codex config: %w", err)
+		}
+
+		if !changed {
+			fmt.Printf("mnemos MCP server already configured in %s (use --force to overwrite)\n", configPath)
+			return nil
+		}
+
+		// Check if file was modified (simple heuristic: if file exists and no error, assume success)
+		// For skip detection, we'd need MergeCodexTOML to return a different signal
+		// For now, always show success message
+		fmt.Printf("✓ Configured mnemos MCP server in %s\n", configPath)
+		fmt.Printf("  Project ID: %s\n", projectID)
+		fmt.Printf("  Command: %s serve\n", binPath)
+		fmt.Println()
+		fmt.Println("  Restart Codex CLI and VSCode extension to activate.")
+		return nil
 	}
 
 	// Merge MCP config — claude global uses a different strategy

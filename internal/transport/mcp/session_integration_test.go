@@ -148,11 +148,11 @@ func TestSessionTracker_MultipleProjects(t *testing.T) {
 
 // TestSessionTracker_BenchModeOFF verifies tracking works in OFF mode
 func TestSessionTracker_BenchModeOFF(t *testing.T) {
-	server, mn, _ := newTestServer(t)
+	server, mn, dataDir := newTestServer(t)
 	ctx := context.Background()
 
-	// Set bench mode to OFF
-	server.benchMode = "off"
+	// Set bench mode to OFF by writing to disk (tests the real code path)
+	require.NoError(t, benchmark.WriteBenchMode(dataDir, benchmark.BenchModeOff))
 
 	// Store should still work and track
 	result, err := server.handleStore(ctx, mcp.CallToolRequest{
