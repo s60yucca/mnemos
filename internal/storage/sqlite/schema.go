@@ -11,10 +11,6 @@ import (
 
 const schema = `
 PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-PRAGMA cache_size=-64000;
-PRAGMA foreign_keys=ON;
-PRAGMA temp_store=MEMORY;
 
 CREATE TABLE IF NOT EXISTS memories (
     id              TEXT PRIMARY KEY,
@@ -98,9 +94,9 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 func Open(path string) (*sql.DB, error) {
 	dsn := path
 	if path == ":memory:" {
-		dsn = "file::memory:?cache=shared&_busy_timeout=5000"
+		dsn = "file::memory:?cache=shared"
 	} else {
-		dsn = fmt.Sprintf("file:%s?_busy_timeout=5000", path)
+		dsn = fmt.Sprintf("file:%s", path)
 	}
 
 	db, err := sql.Open("sqlite", dsn)
@@ -110,11 +106,25 @@ func Open(path string) (*sql.DB, error) {
 
 	db.SetMaxOpenConns(1) // SQLite WAL supports 1 writer
 	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0) // Reuse connection forever
 
 	if err := applySchema(db); err != nil {
 		db.Close()
 		return nil, err
 	}
+
+	// Apply per-connection PRAGMAs (must be set on every connection)
+	if err := applyConnectionPragmas(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	// Validate that critical PRAGMAs were applied
+	if err := validateConnectionPragmas(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, err
@@ -125,6 +135,66 @@ func Open(path string) (*sql.DB, error) {
 func applySchema(db *sql.DB) error {
 	_, err := db.ExecContext(context.Background(), schema)
 	return err
+}
+
+// applyConnectionPragmas sets per-connection PRAGMAs that must be applied to every connection.
+// These settings do NOT persist in the database file and must be set each time a connection is opened.
+func applyConnectionPragmas(db *sql.DB) error {
+	pragmas := []string{
+		"PRAGMA busy_timeout = 5000",       // Wait 5s for lock instead of immediate SQLITE_BUSY
+		"PRAGMA synchronous = NORMAL",      // Safe with WAL, faster than FULL
+		"PRAGMA cache_size = -64000",       // 64MB cache (negative = KB)
+		"PRAGMA foreign_keys = ON",         // Enforce referential integrity
+		"PRAGMA temp_store = MEMORY",       // Use RAM for temp tables
+		"PRAGMA mmap_size = 268435456",     // 256MB memory-mapped I/O for reads
+		"PRAGMA wal_autocheckpoint = 1000", // Auto-checkpoint every 1000 pages (~4MB)
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			return fmt.Errorf("apply %q: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// validateConnectionPragmas verifies that critical PRAGMAs were applied correctly.
+// This catches driver incompatibilities or configuration issues at startup.
+func validateConnectionPragmas(db *sql.DB) error {
+	checks := []struct {
+		pragma   string
+		expected any
+		critical bool
+	}{
+		{"busy_timeout", int64(5000), true},
+		{"foreign_keys", int64(1), true},
+		{"cache_size", int64(-64000), false}, // May vary slightly
+		{"temp_store", int64(2), false},      // 2 = MEMORY
+	}
+
+	for _, check := range checks {
+		var value int64
+		query := fmt.Sprintf("PRAGMA %s", check.pragma)
+		if err := db.QueryRow(query).Scan(&value); err != nil {
+			return fmt.Errorf("validate %s: %w", check.pragma, err)
+		}
+
+		// For cache_size, allow some tolerance (SQLite may adjust)
+		if check.pragma == "cache_size" {
+			if value > -60000 || value < -68000 {
+				if check.critical {
+					return fmt.Errorf("%s = %d, expected ~%v", check.pragma, value, check.expected)
+				}
+			}
+			continue
+		}
+
+		if value != check.expected.(int64) {
+			if check.critical {
+				return fmt.Errorf("%s = %d, expected %v", check.pragma, value, check.expected)
+			}
+		}
+	}
+	return nil
 }
 
 // migration represents a single schema migration step.

@@ -7,7 +7,7 @@ Install once. From then on, your agent builds itself a structured knowledge base
 Single Go binary. Embedded SQLite. Zero cloud. No Docker. No Python. No Node runtime.
 
 ```
-Agent (Claude Code / Cursor / Kiro / Gemini CLI / ...)
+Agent (Claude Code / Cursor / Kiro / Gemini CLI / Codex / ...)
     ↓ MCP stdio
 mnemos serve
     ↓
@@ -91,7 +91,7 @@ git clone https://github.com/s60yucca/mnemos
 cd mnemos && make build
 ```
 
-Swap `claude` for `cursor`, `kiro`, or `gemini-cli`. Restart your client. Autopilot runs from here.
+Swap `claude` for `cursor`, `kiro`, `gemini-cli`, or `codex`. Restart your client. Autopilot runs from here.
 
 ---
 
@@ -251,9 +251,12 @@ mnemos setup claude       # writes CLAUDE.md, .claude/hooks.json, .mcp.json
 mnemos setup cursor       # writes .cursorrules, .mcp.json
 mnemos setup kiro         # writes .kiro/steering/mnemos.md, .kiro/mcp.json
 mnemos setup gemini-cli   # writes GEMINI.md, .gemini/settings.json, .mcp.json
+mnemos setup codex        # writes ~/.codex/config.toml (global, CLI + VSCode)
 ```
 
-Flags: `--global` (install for all projects), `--force` (overwrite existing).
+Flags: `--global` (install for all projects), `--force` (overwrite existing), `--project <id>` (override project ID).
+
+> **Codex note:** Codex uses a single global config shared between the CLI and VSCode extension. `--global` and `--local` flags are ignored — it always writes to `~/.codex/config.toml`. Restart both Codex CLI and the VSCode extension after setup.
 
 ---
 
@@ -274,7 +277,7 @@ mnemos serve                                          # MCP server (stdio)
 mnemos version
 
 # Autopilot setup
-mnemos setup claude | cursor | kiro | gemini-cli [--global] [--force]
+mnemos setup claude | cursor | kiro | gemini-cli | codex [--global] [--force] [--project <id>]
 
 # Passive autopilot daemon
 mnemos autopilot status
@@ -307,7 +310,7 @@ Mnemos does one thing: **give agents a knowledge base that compiles itself.**
 
 See [ROADMAP.md](ROADMAP.md). Short version:
 
-- **v1.1.1 (shipped):** full auto-pipeline, MMR context assembly, file-aware retrieval, passive autopilot daemon, benchmark framework
+- **v1.1.x (shipped):** full auto-pipeline, MMR context assembly, file-aware retrieval, passive autopilot daemon, benchmark framework, Codex support
 - **v1.2 (next):** public value benchmark (dogfooding), npm wrapper, demo GIF, HN launch
 - **v1.3 (planned):** team memory via git — shared `.mnemos/shared/` for teammate knowledge
 - **v2.0+ (TBD):** cross-project memory scopes, memory compaction, driven by user feedback

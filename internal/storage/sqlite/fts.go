@@ -116,8 +116,11 @@ func (f *FTSSearcher) Reindex(ctx context.Context) error {
 	return err
 }
 
+const maxQueryTokens = 30
+
 // sanitizeFTSQuery removes characters that cause FTS5 syntax errors and
-// wraps each token in double-quotes so the query is treated as a phrase prefix search.
+// wraps each token in double-quotes so the query is treated as an OR search.
+// Truncates to maxQueryTokens to prevent performance issues with very long queries.
 func sanitizeFTSQuery(q string) string {
 	// Strip FTS5 special characters: " ( ) * : ^ -
 	replacer := strings.NewReplacer(
@@ -140,11 +143,20 @@ func sanitizeFTSQuery(q string) string {
 		if tok != "" {
 			tokens = append(tokens, `"`+tok+`"`)
 		}
+		// Truncate to prevent performance issues
+		if len(tokens) >= maxQueryTokens {
+			break
+		}
 	}
 	if len(tokens) == 0 {
 		return `""`
 	}
-	return strings.Join(tokens, " ")
+	// Single token doesn't need OR
+	if len(tokens) == 1 {
+		return tokens[0]
+	}
+	// Join with OR for multi-keyword matching
+	return strings.Join(tokens, " OR ")
 }
 
 func scanFTSRow(rows *sql.Rows) (*domain.Memory, float64, string, error) {

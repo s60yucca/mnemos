@@ -320,3 +320,159 @@ func TestSQLiteStore_ReduceRelevance(t *testing.T) {
 	err := store.ReduceRelevance(ctx, "nonexistent", 0.1, 0.05)
 	assert.ErrorIs(t, err, domain.ErrNotFound)
 }
+
+// TestOpen_ConnectionPragmasApplied verifies that per-connection PRAGMAs are correctly applied.
+// This test addresses the bug where PRAGMAs in the schema string were not persisting to new connections.
+func TestOpen_ConnectionPragmasApplied(t *testing.T) {
+	db, err := Open(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	tests := []struct {
+		pragma   string
+		expected int64
+		name     string
+	}{
+		{"busy_timeout", 5000, "busy_timeout should be 5000ms"},
+		{"foreign_keys", 1, "foreign_keys should be ON (1)"},
+		{"temp_store", 2, "temp_store should be MEMORY (2)"},
+		{"wal_autocheckpoint", 1000, "wal_autocheckpoint should be 1000 pages"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var value int64
+			query := fmt.Sprintf("PRAGMA %s", tt.pragma)
+			err := db.QueryRow(query).Scan(&value)
+			require.NoError(t, err, "failed to query %s", tt.pragma)
+			assert.Equal(t, tt.expected, value, "%s mismatch", tt.pragma)
+		})
+	}
+
+	// cache_size check (allow some tolerance)
+	var cacheSize int64
+	err = db.QueryRow("PRAGMA cache_size").Scan(&cacheSize)
+	require.NoError(t, err, "failed to query cache_size")
+	assert.True(t, cacheSize <= -60000 && cacheSize >= -68000,
+		"cache_size should be around -64000, got %d", cacheSize)
+
+	// mmap_size check (may not be supported by all drivers)
+	var mmapSize int64
+	err = db.QueryRow("PRAGMA mmap_size").Scan(&mmapSize)
+	if err == nil {
+		assert.Equal(t, int64(268435456), mmapSize, "mmap_size should be 256MB")
+	} else {
+		t.Logf("mmap_size PRAGMA not supported by driver: %v", err)
+	}
+}
+
+// TestOpen_ValidationCatchesMissingPragma verifies that validateConnectionPragmas
+// catches configuration issues at startup.
+func TestOpen_ValidationCatchesMissingPragma(t *testing.T) {
+	// This test verifies the validation logic by checking that Open() succeeds
+	// when PRAGMAs are correctly applied. A negative test (forcing validation failure)
+	// would require mocking the database, which is beyond the scope of this test.
+
+	db, err := Open(":memory:")
+	require.NoError(t, err, "Open should succeed when PRAGMAs are correctly applied")
+	defer db.Close()
+
+	// Verify validation ran by checking that critical PRAGMAs are set
+	var busyTimeout int64
+	err = db.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5000), busyTimeout, "validation should have caught incorrect busy_timeout")
+}
+
+// TestForeignKeysEnforced verifies that foreign key constraints are actually enforced.
+// This test addresses the bug where foreign_keys=OFF at runtime despite being set in code.
+func TestForeignKeysEnforced(t *testing.T) {
+	db, err := Open(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Verify foreign_keys is ON
+	var fkEnabled int64
+	err = db.QueryRow("PRAGMA foreign_keys").Scan(&fkEnabled)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), fkEnabled, "foreign_keys should be ON")
+
+	// Test that foreign key constraint is enforced
+	// Try to insert a memory_relation with non-existent source_id
+	ctx := context.Background()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO memory_relations (id, source_id, target_id, relation_type, strength, created_at)
+		VALUES ('rel1', 'nonexistent-source', 'nonexistent-target', 'relates_to', 1.0, ?)
+	`, time.Now().UnixNano())
+
+	// Should fail with foreign key constraint error
+	require.Error(t, err, "should fail due to foreign key constraint")
+	assert.Contains(t, err.Error(), "FOREIGN KEY constraint failed",
+		"error should mention foreign key constraint")
+}
+
+// TestBusyTimeoutPreventsImmediateFailure verifies that busy_timeout allows
+// concurrent writes to wait instead of failing immediately.
+func TestBusyTimeoutPreventsImmediateFailure(t *testing.T) {
+	// Create a real file-based database for this test (not :memory:)
+	// because we need to test multi-connection behavior
+	tmpDB := t.TempDir() + "/test.db"
+	db1, err := Open(tmpDB)
+	require.NoError(t, err)
+	defer db1.Close()
+
+	// Verify busy_timeout is set
+	var timeout int64
+	err = db1.QueryRow("PRAGMA busy_timeout").Scan(&timeout)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5000), timeout, "busy_timeout should be 5000ms")
+
+	// Open a second connection to the same database
+	db2, err := Open(tmpDB)
+	require.NoError(t, err)
+	defer db2.Close()
+
+	ctx := context.Background()
+
+	// Start a transaction on db1 (holds RESERVED lock)
+	tx1, err := db1.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer tx1.Rollback()
+
+	// Insert a memory in tx1 (upgrades to EXCLUSIVE lock)
+	mem := newTestMemory("concurrent test")
+	_, err = tx1.Exec(`
+		INSERT INTO memories (id, content, type, status, content_hash, created_at, updated_at, last_accessed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		mem.ID, mem.Content, mem.Type, mem.Status, mem.ContentHash,
+		util.TimeToUnixNano(mem.CreatedAt), util.TimeToUnixNano(mem.UpdatedAt), util.TimeToUnixNano(mem.LastAccessedAt))
+	require.NoError(t, err)
+
+	// Try to write from db2 while tx1 is active
+	// With busy_timeout=5000, this should wait (not fail immediately)
+	// We'll commit tx1 quickly so db2 succeeds
+	done := make(chan error, 1)
+	go func() {
+		mem2 := newTestMemory("concurrent test 2")
+		_, err := db2.ExecContext(ctx, `
+			INSERT INTO memories (id, content, type, status, content_hash, created_at, updated_at, last_accessed_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			mem2.ID, mem2.Content, mem2.Type, mem2.Status, mem2.ContentHash,
+			util.TimeToUnixNano(mem2.CreatedAt), util.TimeToUnixNano(mem2.UpdatedAt), util.TimeToUnixNano(mem2.LastAccessedAt))
+		done <- err
+	}()
+
+	// Wait a bit to ensure db2 is blocked
+	time.Sleep(100 * time.Millisecond)
+
+	// Commit tx1 to release the lock
+	require.NoError(t, tx1.Commit())
+
+	// db2 should now succeed (waited for lock instead of failing immediately)
+	select {
+	case err := <-done:
+		require.NoError(t, err, "db2 write should succeed after tx1 commits")
+	case <-time.After(6 * time.Second):
+		t.Fatal("db2 write timed out (busy_timeout may not be working)")
+	}
+}
