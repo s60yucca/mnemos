@@ -7,7 +7,7 @@
     "mnemos": "./cli.js"
   },
   "scripts": {
-    "test": "jest --passWithNoTests",
+    "test": "jest --passWithNoTests --runInBand",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

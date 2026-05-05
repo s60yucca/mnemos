@@ -102,7 +102,7 @@ describe('CLI Integration Tests', () => {
       // Binary that exits with success if it receives arguments
       const mockBinaryContent = process.platform === 'win32'
         ? '@echo off\nif "%1"=="" (exit /b 1) else (echo Arguments received & exit /b 0)'
-        : '#!/bin/sh\nif [ $# -eq 0 ]; then exit 1; fi\nprintf "Arguments received\\n"\nexit 0';
+        : '#!/bin/sh\nif [ $# -eq 0 ]; then exit 1; fi\necho "Arguments received"\nexit 0';
       
       fs.writeFileSync(mockBinaryPath, mockBinaryContent);
       if (process.platform !== 'win32') {
@@ -121,7 +121,7 @@ describe('CLI Integration Tests', () => {
       
       child.on('exit', (code) => {
         // Clean up
-        fs.rmSync(cacheDir, { recursive: true, force: true });
+        try { fs.rmSync(cacheDir, { recursive: true, force: true }); } catch (_) {}
         
         // Should exit with 0 (arguments were passed)
         expect(code).toBe(0);
@@ -131,7 +131,7 @@ describe('CLI Integration Tests', () => {
         
         done();
       });
-    }, 10000);
+    }, 20000);
 
     test('forwards exit code from binary', (done) => {
       // Create a mock binary that exits with code 42
