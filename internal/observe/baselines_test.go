@@ -15,6 +15,7 @@ func TestBaselines_AllFeaturesHaveBaselines(t *testing.T) {
 		"compile",
 		"decay",
 		"topic_shift",
+		"auto_inject",
 	}
 
 	for _, feature := range expectedFeatures {

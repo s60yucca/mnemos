@@ -57,4 +57,9 @@ var Baselines = map[string]Baseline{
 		RatioVsMCPCalls: 0.0,
 		Expected:        "Session topic changes",
 	},
+	"auto_inject": {
+		MinDaily:        3,
+		RatioVsMCPCalls: 0.1,
+		Expected:        "At least 3 auto-inject payloads per active day; ratio ~0.1 vs total MCP calls",
+	},
 }

@@ -2,6 +2,9 @@
   "mcpServers": {
     "mnemos": {
       "command": "mnemos",
+      "env": {
+        "MNEMOS_CLIENT": "trae-solo"
+      },
       "args": [
         "serve"
       ]

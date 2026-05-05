@@ -45,10 +45,7 @@ func TestDogfoodSimulation_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	logFile.Close()
 
-	// Create mnemos instance
-	mn, err := core.NewMnemos(dataDir)
-	require.NoError(t, err)
-	defer mn.Close()
+	mn := buildTestMnemos(t)
 
 	// --- Phase 1: Bench Mode ON (5 sessions) ---
 	require.NoError(t, benchmark.WriteBenchMode(dataDir, benchmark.BenchModeOn))

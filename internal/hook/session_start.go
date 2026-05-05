@@ -87,6 +87,7 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	var contextString string
 	var tokensUsed int
 	var querySource string
+	var existingIDs []string
 
 	if quality == QuerySpecific {
 		result, err := d.mnemos.AssembleContext(ctx, query, state.ProjectID, d.cfg.SessionStartMaxTokens, false, payload.OpenFiles)
@@ -98,10 +99,15 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 			}, nil
 		}
 		contextString = formatContextResult(ctx, d.mnemos, state.ProjectID, result)
+		for _, mem := range result.Memories {
+			existingIDs = append(existingIDs, mem.ID)
+		}
 		tokensUsed = result.TotalTokens
 		querySource = "task_specific_query"
 	} else { // QueryBroad
-		contextString = assembleRecentContext(ctx, d.mnemos, state.ProjectID, d.cfg.SessionStartMaxTokens)
+		var usedIDs []string
+		contextString, usedIDs = assembleRecentContext(ctx, d.mnemos, state.ProjectID, d.cfg.SessionStartMaxTokens)
+		existingIDs = usedIDs
 		if contextString == "" {
 			return &HookOutput{
 				Status:  "ok",
@@ -117,7 +123,34 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 		querySource = "broad_query_recent_context"
 	}
 
-	// 7. RETURN CONTEXT
+	// 7. AUTO INJECT
+	var dataDir string
+	home, err := os.UserHomeDir()
+	if err == nil {
+		dataDir = filepath.Join(home, ".mnemos")
+	}
+
+	detector := NewProjectDetector(resolveProjectDir(input), dataDir)
+	detectedProjectID, _, _ := detector.Detect()
+
+	var autoInjectPayload string
+
+	if detectedProjectID != "" {
+		clientID := os.Getenv("MNEMOS_CLIENT")
+		injector := NewAutoInjector(d.mnemos, AutoInjectConfigFromEnv(), dataDir)
+
+		// To deduplicate, we need to extract IDs from the existing contextString
+		// Wait, existingIDs was populated earlier
+
+		autoInjectPayload, _, _ = injector.Run(ctx, sessionID, detectedProjectID, clientID, existingIDs)
+
+		if autoInjectPayload != "" {
+			contextString = autoInjectPayload + "\n\n" + contextString
+			tokensUsed += len(autoInjectPayload) / 4
+		}
+	}
+
+	// 8. RETURN CONTEXT
 	return &HookOutput{
 		ContextInjection: contextString,
 		Status:           "ok",
@@ -203,7 +236,7 @@ func assessQueryQuality(query, projectID string) QueryQuality {
 	return QueryBroad
 }
 
-func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string, maxTokens int) string {
+func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string, maxTokens int) (string, []string) {
 	const (
 		capCompiled  = 500
 		capSkills    = 250
@@ -217,6 +250,7 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 
 	var sb strings.Builder
 	totalTokens := 0
+	var usedIDs []string
 
 	addSection := func(title string, mems []*domain.Memory, cap int, truncator func(string, int) string) {
 		if len(mems) == 0 {
@@ -243,6 +277,7 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 			}
 			secSb.WriteString(entry)
 			secTokens += tks
+			usedIDs = append(usedIDs, mem.ID)
 		}
 
 		if secTokens > estimateTokens("### "+title+"\n\n") {
@@ -332,9 +367,9 @@ func assembleRecentContext(ctx context.Context, m *core.Mnemos, projectID string
 	addSection("Recent Activity", recents, capRecent, truncLine)
 
 	if sb.Len() == 0 {
-		return ""
+		return "", usedIDs
 	}
-	return "## Recent Context\n\n" + sb.String()
+	return "## Recent Context\n\n" + sb.String(), usedIDs
 }
 
 // truncateAtSentenceBoundary truncates s to at most maxChars characters,

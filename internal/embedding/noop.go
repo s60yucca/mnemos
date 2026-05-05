@@ -14,8 +14,8 @@ func NewNoopProvider(dims int) *NoopProvider {
 	return &NoopProvider{dims: dims}
 }
 
-func (n *NoopProvider) Name() string       { return "noop" }
-func (n *NoopProvider) Dimensions() int    { return n.dims }
+func (n *NoopProvider) Name() string                   { return "noop" }
+func (n *NoopProvider) Dimensions() int                { return n.dims }
 func (n *NoopProvider) Healthy(_ context.Context) bool { return true }
 
 func (n *NoopProvider) Embed(_ context.Context, _ string) ([]float32, error) {

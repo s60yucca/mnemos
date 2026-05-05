@@ -260,6 +260,25 @@ Flags: `--global` (install for all projects), `--force` (overwrite existing), `-
 
 ---
 
+## 🤖 Using with Trae, OpenClaw, Paperclip, or any MCP Client
+
+If you are using emerging AI frameworks like **Trae (Solo Agent)**, **OpenClaw (Claw bot)**, **Paperclip**, or **Claude Desktop**, you can easily connect Mnemos manually. Mnemos speaks standard MCP over `stdio`. 
+
+Just add this JSON snippet to your client's MCP configuration file (e.g., `trae.json`, `openclaw.json`, `paperclip.config.json`, or `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mnemos": {
+      "command": "mnemos",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+---
+
 ## CLI reference
 
 ```bash
@@ -277,7 +296,7 @@ mnemos serve                                          # MCP server (stdio)
 mnemos version
 
 # Autopilot setup
-mnemos setup claude | cursor | kiro | gemini-cli | codex [--global] [--force] [--project <id>]
+mnemos setup claude | cursor | kiro | gemini-cli | codex | trae [--global] [--force] [--project <id>]
 
 # Passive autopilot daemon
 mnemos autopilot status

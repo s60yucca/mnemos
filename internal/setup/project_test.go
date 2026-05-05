@@ -145,9 +145,9 @@ func TestSanitizeProjectID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := sanitizeProjectID(tt.input)
+			got := SanitizeProjectID(tt.input)
 			if got != tt.want {
-				t.Errorf("sanitizeProjectID(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("SanitizeProjectID(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

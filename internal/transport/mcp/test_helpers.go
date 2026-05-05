@@ -3,10 +3,12 @@ package mcp
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mnemos-dev/mnemos/internal/config"
 	core "github.com/mnemos-dev/mnemos/internal/core"
+	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
 	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
 	"github.com/mnemos-dev/mnemos/internal/core/relation"
 	"github.com/mnemos-dev/mnemos/internal/core/search"
@@ -48,10 +50,11 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, string) {
 	)
 
 	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, slog.Default(), 0.7, 1.5)
-	relManager := relation.NewManager(relStore, memStore, nil)
+	relManager := relation.NewManager(relStore, memStore, slog.Default())
+	lifecycleEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, slog.Default())
 
 	// Create mnemos facade
-	mnemos := core.NewMnemos(memManager, searchEngine, relManager, nil, memStore, nil)
+	mnemos := core.NewMnemos(memManager, searchEngine, relManager, lifecycleEngine, memStore, slog.Default())
 
 	// Create MCP server
 	server := NewServer(mnemos, "test-version")

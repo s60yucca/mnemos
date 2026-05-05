@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	decayFloor = 0.05
+	decayFloor        = 0.05
 	accessBoostFactor = 0.1
 )
 

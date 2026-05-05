@@ -4,12 +4,40 @@ Use Mnemos automatically during this workspace session.
 
 ## Session Start
 
-At the start of a new task or session, call `mnemos_context` once before planning or coding.
+At the start of a new task or session, call `mnemos_context` once before planning, coding, **or delegating**.
 
 - Use the current task, feature, bug, or subsystem as the query
 - Include the current project scope
 - Use a token budget around 2000
 - Do not call repeatedly unless the task changes substantially
+- **If you are an orchestrator agent, call this BEFORE delegating to subagents**
+
+## Before Delegating (Orchestrators)
+
+**CRITICAL for orchestrator agents:** If you are about to delegate to a subagent (e.g., `invokeSubAgent`, `context-gatherer`, `spec-task-execution`), call `mnemos_context` FIRST.
+
+**Why:** Subagents don't inherit your steering context. If you don't call mnemos before delegating, the subagent will start with zero memory.
+
+**Pattern:**
+1. Receive user request
+2. Call `mnemos_context` with the task/feature/bug as query
+3. Review the context
+4. Delegate to subagent with context in your prompt
+
+**Example:**
+```
+User asks: "Fix the authentication bug"
+
+Orchestrator:
+1. Calls mnemos_context(query="authentication bug", project_id="myproject")
+2. Receives: "JWT refresh fails due to clock skew - fixed in commit abc123"
+3. Delegates to bugfix-workflow with: "Fix auth bug. Note: previous JWT clock skew issue in commit abc123"
+```
+
+**This applies to ALL agent types:**
+- Orchestrator agents (workflow selection, delegation)
+- Planning agents (spec creation, task breakdown)
+- Implementation agents (code changes)
 
 ## During Work
 

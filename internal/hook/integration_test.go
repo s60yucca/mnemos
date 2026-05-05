@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/hook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,6 +125,78 @@ func TestIntegration_ConcurrentSessions(t *testing.T) {
 	for i, errMsg := range errors {
 		assert.Empty(t, errMsg, "session %d had an error", i)
 	}
+}
+
+// TestIntegration_AutoInject verifies auto-inject firing and deduplication (Tasks 2.2 and 6.1).
+// Section 6.1 (Timing test) is covered by asserting the hook execution time.
+func TestIntegration_AutoInject(t *testing.T) {
+	// Set up a temporary home directory so features.log doesn't fail
+	testHome := t.TempDir()
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", testHome)
+	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
+
+	projectDir := t.TempDir()
+	mnemosDir := filepath.Join(projectDir, ".mnemos")
+	require.NoError(t, os.Mkdir(mnemosDir, 0o755))
+
+	// Enable bench mode to allow auto-inject
+	require.NoError(t, os.WriteFile(filepath.Join(mnemosDir, "bench_mode"), []byte("on"), 0644))
+
+	mn := newTestMnemos(t)
+	cfg := defaultHookConfig()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	d := hook.NewDispatcher(mn, cfg, logger)
+
+	ctx := context.Background()
+	projectID := filepath.Base(projectDir)
+
+	// Mem1: auto-injected
+	mem1, err := mn.Store(ctx, &domain.StoreRequest{
+		Content:   "general architecture overview for the project",
+		Type:      domain.MemoryTypeSemantic,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	// Mem2: specifically retrieved by prompt, should be deduplicated from auto-inject
+	mem2, err := mn.Store(ctx, &domain.StoreRequest{
+		Content:   "specific implementation details about the JWT authentication",
+		Type:      domain.MemoryTypeEpisodic,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	start := time.Now()
+
+	// session-start with a prompt that matches mem2
+	sessionID := "auto-inject-session"
+	startPayload, _ := json.Marshal(map[string]string{
+		"task_description": "implement JWT authentication",
+	})
+	startInput := buildInput(t, "session-start", sessionID, projectDir, startPayload)
+	startOut := dispatchRaw(t, d, startInput)
+
+	duration := time.Since(start)
+
+	assert.NotEqual(t, "error", startOut.Status, "session-start should not error: %s", startOut.Message)
+
+	// Section 6.1: Timing test
+	assert.Less(t, duration, 500*time.Millisecond, "auto-inject should complete within 500ms")
+
+	// Section 2.2: Ensure auto-inject firing and deduplication
+	assert.Contains(t, startOut.ContextInjection, "# Mnemos Project Context", "auto-inject section should be present")
+
+	parts := strings.Split(startOut.ContextInjection, "## Relevant Memory Context")
+	require.Len(t, parts, 2, "context should contain auto-inject and main sections")
+
+	autoInjectSection := parts[0]
+	mainContextSection := parts[1]
+
+	assert.Contains(t, autoInjectSection, mem1.Memory.ID, "mem1 should be auto-injected")
+	assert.NotContains(t, autoInjectSection, mem2.Memory.ID, "mem2 should NOT be auto-injected (deduplicated)")
+
+	assert.Contains(t, mainContextSection, "specific implementation details", "mem2 should be in main context")
 }
 
 // --- helpers ---

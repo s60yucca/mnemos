@@ -8,6 +8,7 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/autopilot"
 	core "github.com/mnemos-dev/mnemos/internal/core"
+	"github.com/mnemos-dev/mnemos/internal/hook"
 	"github.com/spf13/cobra"
 )
 
@@ -60,6 +61,16 @@ func newAutopilotStatusCmd(daemon *autopilot.AutopilotDaemon, dataDir string) *c
 
 func printDaemonStatus(s *autopilot.DaemonStatus, fromFile bool) {
 	fmt.Printf("enabled:       %v\n", s.Enabled)
+
+	// Display auto-inject config
+	autoInjectCfg := hook.AutoInjectConfigFromEnv()
+	fmt.Println("\nAuto-Inject Configuration:")
+	fmt.Printf("  Enabled:        %v\n", autoInjectCfg.Enabled)
+	fmt.Printf("  Budget:         %d tokens\n", autoInjectCfg.Budget)
+	fmt.Printf("  Max Count:      %d memories\n", autoInjectCfg.MaxCount)
+	fmt.Printf("  Summary Length: %d chars\n", autoInjectCfg.SummaryLength)
+	fmt.Println()
+
 	fmt.Printf("last_findings: %d\n", s.LastFindingCount)
 	if s.NextRun.IsZero() {
 		fmt.Println("next_run:      (not scheduled)")

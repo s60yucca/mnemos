@@ -67,7 +67,7 @@ func testBug1GlobalMCPTarget(t *testing.T) {
 	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
 
 	// Call the fixed MergeClaudeGlobalMCP — should write to ~/.claude.json
-	binPath := "/opt/homebrew/bin/mnemos"
+	binPath := "mnemos"
 	err := setup.MergeClaudeGlobalMCP(binPath)
 	if err != nil {
 		t.Fatalf("MergeClaudeGlobalMCP failed: %v", err)
@@ -248,25 +248,22 @@ func testBug3DestructiveOverwrite(t *testing.T) {
 	}
 }
 
-// testBug4BareHookCommand asserts that after calling MergeClaudeSettings with a
-// resolved binPath, the hook commands contain an absolute path prefix rather than
-// the bare binary name "mnemos".
+// testBug4BareHookCommand asserts that after calling MergeClaudeSettings with
+// the global command name, the hook commands use "mnemos hook session-start" format.
 //
-// PASSES after the fix because MergeClaudeSettings now accepts binPath and uses it
-// to construct hook commands like "/opt/homebrew/bin/mnemos hook session-start".
+// PASSES after the fix because MergeClaudeSettings uses the global command name
+// to construct hook commands like "mnemos hook session-start".
 //
-// Counterexample (unfixed):
-//
-//	Expected: "/opt/homebrew/bin/mnemos hook session-start"
-//	Actual:   "mnemos hook session-start"  ← bare name, fails in GUI PATH
+// Note: After the fix to use global command names instead of absolute paths,
+// this test verifies that hook commands use "mnemos" (which resolves via PATH).
 func testBug4BareHookCommand(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 
-	// Use a fixed absolute binPath to simulate a resolved binary location.
-	binPath := "/opt/homebrew/bin/mnemos"
+	// Use global command name instead of absolute path
+	binPath := "mnemos"
 
-	// Call MergeClaudeSettings with the new two-arg signature (fixed code).
+	// Call MergeClaudeSettings with the global command name
 	if err := setup.MergeClaudeSettings(filePath, binPath); err != nil {
 		t.Fatalf("MergeClaudeSettings failed: %v", err)
 	}
@@ -278,25 +275,7 @@ func testBug4BareHookCommand(t *testing.T) {
 
 	content := string(data)
 
-	// Assert CORRECT behavior: hook commands MUST contain an absolute path prefix.
-	// An absolute path starts with "/" on unix.
-	bareCommands := []string{
-		`"mnemos hook session-start"`,
-		`"mnemos hook prompt-submit"`,
-		`"mnemos hook session-end"`,
-	}
-
-	for _, bare := range bareCommands {
-		if strings.Contains(content, bare) {
-			t.Errorf("BUG 4 NOT FIXED: hook command still uses bare binary name\n"+
-				"Found: %q in settings.json\n"+
-				"Expected: absolute path like \"/opt/homebrew/bin/mnemos hook session-start\"\n"+
-				"Counterexample: bare 'mnemos' fails when Claude Code is launched from GUI (PATH=/usr/bin:/bin)",
-				bare)
-		}
-	}
-
-	// Assert that hook commands with the absolute path ARE present
+	// Assert CORRECT behavior: hook commands MUST use the global command name
 	expectedCommands := []string{
 		binPath + " hook session-start",
 		binPath + " hook prompt-submit",
@@ -304,7 +283,7 @@ func testBug4BareHookCommand(t *testing.T) {
 	}
 	for _, expected := range expectedCommands {
 		if !strings.Contains(content, expected) {
-			t.Errorf("BUG 4 NOT FIXED: expected hook command with absolute path not found\n"+
+			t.Errorf("Expected hook command not found\n"+
 				"Expected to find: %q\n"+
 				"Content: %s",
 				expected, content)

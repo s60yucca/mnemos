@@ -65,14 +65,14 @@ func (s MemoryStatus) String() string { return string(s) }
 type RelationType string
 
 const (
-	RelationTypeRelatesTo   RelationType = "relates_to"
-	RelationTypeDependsOn   RelationType = "depends_on"
-	RelationTypeContradicts RelationType = "contradicts"
-	RelationTypeSupersedes  RelationType = "supersedes"
-	RelationTypeDerivedFrom RelationType = "derived_from"
-	RelationTypePartOf      RelationType = "part_of"
-	RelationTypeCausedBy    RelationType = "caused_by"
-	RelationTypeReferences  RelationType = "references" // alias for relates_to
+	RelationTypeRelatesTo    RelationType = "relates_to"
+	RelationTypeDependsOn    RelationType = "depends_on"
+	RelationTypeContradicts  RelationType = "contradicts"
+	RelationTypeSupersedes   RelationType = "supersedes"
+	RelationTypeDerivedFrom  RelationType = "derived_from"
+	RelationTypePartOf       RelationType = "part_of"
+	RelationTypeCausedBy     RelationType = "caused_by"
+	RelationTypeReferences   RelationType = "references" // alias for relates_to
 	RelationTypeCompiledFrom RelationType = "compiled_from"
 )
 
@@ -90,17 +90,17 @@ func (r RelationType) String() string { return string(r) }
 
 // Built-in categories
 const (
-	CategoryCode         = "code"
-	CategoryArchitecture = "architecture"
-	CategoryDecision     = "decision"
-	CategoryBug          = "bug"
-	CategoryFeature      = "feature"
-	CategoryAPI          = "api"
-	CategoryDatabase     = "database"
-	CategorySecurity     = "security"
-	CategoryPerformance  = "performance"
-	CategoryTesting      = "testing"
-	CategoryDeployment   = "deployment"
+	CategoryCode          = "code"
+	CategoryArchitecture  = "architecture"
+	CategoryDecision      = "decision"
+	CategoryBug           = "bug"
+	CategoryFeature       = "feature"
+	CategoryAPI           = "api"
+	CategoryDatabase      = "database"
+	CategorySecurity      = "security"
+	CategoryPerformance   = "performance"
+	CategoryTesting       = "testing"
+	CategoryDeployment    = "deployment"
 	CategoryDocumentation = "documentation"
-	CategoryGeneral      = "general"
+	CategoryGeneral       = "general"
 )

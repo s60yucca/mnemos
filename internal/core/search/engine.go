@@ -39,6 +39,9 @@ func NewSearchEngine(
 	lambda float64,
 	fileBoost float64,
 ) *SearchEngine {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &SearchEngine{
 		fts:        fts,
 		embedStore: embedStore,

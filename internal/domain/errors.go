@@ -21,7 +21,7 @@ type NotFoundError struct {
 	ID string
 }
 
-func (e *NotFoundError) Error() string { return fmt.Sprintf("memory not found: %s", e.ID) }
+func (e *NotFoundError) Error() string        { return fmt.Sprintf("memory not found: %s", e.ID) }
 func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
 
 // ValidationError carries a single field error
@@ -30,7 +30,9 @@ type ValidationError struct {
 	Message string
 }
 
-func (e *ValidationError) Error() string { return fmt.Sprintf("validation error: %s: %s", e.Field, e.Message) }
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("validation error: %s: %s", e.Field, e.Message)
+}
 func (e *ValidationError) Is(target error) bool { return target == ErrValidation }
 
 // ValidationErrors is a collection of field errors

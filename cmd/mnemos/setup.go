@@ -27,6 +27,7 @@ func newSetupCmd() *cobra.Command {
 		newSetupClientCmd("cursor"),
 		newSetupClientCmd("gemini-cli"),
 		newSetupClientCmd("codex"),
+		newSetupClientCmd("trae"),
 	)
 
 	return cmd
@@ -96,11 +97,8 @@ func runUninstall(clientName string, global bool) error {
 		return fmt.Errorf("--uninstall is currently only supported for the claude client")
 	}
 
-	binPath, err := setup.ResolveBinaryPath()
-	if err != nil {
-		// Fall back to bare name if resolution fails
-		binPath = "mnemos"
-	}
+	// Use global command name instead of absolute path
+	binPath := "mnemos"
 
 	if global {
 		if err := setup.UninstallClaudeGlobal(binPath); err != nil {
@@ -120,15 +118,12 @@ func runUninstall(clientName string, global bool) error {
 func runSetup(clientName string, force, global bool) error {
 	clientCfg, ok := setup.Clients[clientName]
 	if !ok {
-		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli, codex", clientName)
+		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli, codex, trae", clientName)
 	}
 
-	// Resolve the absolute binary path early — used for hook commands and plist ProgramArguments.
-	binPath, err := setup.ResolveBinaryPath()
-	if err != nil {
-		// Fall back to bare name if resolution fails (e.g. during tests)
-		binPath = "mnemos"
-	}
+	// Use global command name instead of absolute path.
+	// This ensures the config continues working after package manager updates (e.g., brew).
+	binPath := "mnemos"
 
 	// Ensure global config exists (idempotent)
 	if _, err := setup.EnsureGlobalConfig(); err != nil {
@@ -217,6 +212,24 @@ func runSetup(clientName string, force, global bool) error {
 		return nil
 	}
 
+	// Trae uses app-managed global config paths; local config is .trae/mcp.json.
+	if clientName == "trae" && global {
+		paths, err := setup.MergeTraeGlobalMCP(binPath)
+		if err != nil {
+			return fmt.Errorf("merge trae global MCP: %w", err)
+		}
+		if len(paths) == 0 {
+			return fmt.Errorf("could not locate Trae config directory; use local setup instead (creates .trae/mcp.json)")
+		}
+		fmt.Println("✓ Configured mnemos MCP server for Trae:")
+		for _, p := range paths {
+			fmt.Printf("  - %s\n", p)
+		}
+		fmt.Println()
+		fmt.Println("Restart Trae SOLO to activate.")
+		return nil
+	}
+
 	// Merge MCP config — claude global uses a different strategy
 	if clientName == "claude" && global {
 		// Use MergeClaudeGlobalMCP instead of generic MergeMCPConfig
@@ -251,6 +264,18 @@ func runSetup(clientName string, force, global bool) error {
 			Args:    []string{"serve"},
 		}); err != nil {
 			return fmt.Errorf("merge MCP config: %w", err)
+		}
+		if clientName == "trae" {
+			_ = setup.MergeMCPEnv(mcpTarget, "mnemos", map[string]string{
+				"MNEMOS_CLIENT": "trae-solo",
+			})
+			paths, err := setup.MergeTraeGlobalMCP(binPath)
+			if err == nil && len(paths) > 0 {
+				fmt.Println("✓ Trae SOLO detected — global MCP config updated:")
+				for _, p := range paths {
+					fmt.Printf("  - %s\n", p)
+				}
+			}
 		}
 
 		// Check for duplicate MCP warning: if installing locally, warn if ~/.claude.json also has mnemos

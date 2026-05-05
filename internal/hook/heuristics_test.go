@@ -36,11 +36,11 @@ func TestIsGenericPrompt(t *testing.T) {
 		{"makes sense", true},
 		{"got it", true},
 		{"understood", true},
-		{"yes please", true},             // "please" is not meaningful; overall too vague
-		{"fix the auth bug", false},       // has technical term "auth"
-		{"ok let's refactor", false},      // "refactor" is a technical-adjacent term
+		{"yes please", true},                // "please" is not meaningful; overall too vague
+		{"fix the auth bug", false},         // has technical term "auth"
+		{"ok let's refactor", false},        // "refactor" is a technical-adjacent term
 		{"implement authentication", false}, // "authentication" is a tech term
-		{"", true},                        // empty → generic (new behaviour: true)
+		{"", true},                          // empty → generic (new behaviour: true)
 	}
 
 	for _, c := range cases {

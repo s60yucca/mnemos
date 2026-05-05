@@ -14,13 +14,13 @@ import (
 // The result is sanitized to lowercase with special characters replaced by hyphens.
 func DeriveProjectID(userProvided string) (string, error) {
 	if userProvided != "" {
-		return sanitizeProjectID(userProvided), nil
+		return SanitizeProjectID(userProvided), nil
 	}
 
 	// Try git remote URL
 	projectID, err := deriveFromGit()
 	if err == nil && projectID != "" {
-		return sanitizeProjectID(projectID), nil
+		return SanitizeProjectID(projectID), nil
 	}
 
 	// Fallback to directory basename
@@ -29,7 +29,7 @@ func DeriveProjectID(userProvided string) (string, error) {
 		return "", err
 	}
 
-	return sanitizeProjectID(filepath.Base(cwd)), nil
+	return SanitizeProjectID(filepath.Base(cwd)), nil
 }
 
 // deriveFromGit extracts the repository name from git remote URL.
@@ -67,8 +67,8 @@ func deriveFromGit() (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-// sanitizeProjectID converts a project ID to lowercase and replaces special characters.
-func sanitizeProjectID(id string) string {
+// SanitizeProjectID converts a project ID to lowercase and replaces special characters.
+func SanitizeProjectID(id string) string {
 	id = strings.ToLower(id)
 	// Replace non-alphanumeric characters (except hyphens) with hyphens
 	re := regexp.MustCompile(`[^a-z0-9-]+`)

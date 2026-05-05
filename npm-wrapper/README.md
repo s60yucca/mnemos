@@ -66,6 +66,21 @@ Add this to your Kiro MCP configuration (`.kiro/settings/mcp.json`):
 }
 ```
 
+#### Trae (Solo Agent) Configuration
+
+Add this to your Trae MCP configuration (`~/.trae/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "mnemos": {
+      "command": "npx",
+      "args": ["-y", "@s60yucca/mnemos", "serve"]
+    }
+  }
+}
+```
+
 #### Claude Desktop Configuration
 
 Add this to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):

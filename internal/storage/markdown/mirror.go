@@ -21,7 +21,7 @@ func NewMirror(basePath string, enabled bool) *Mirror {
 	return &Mirror{basePath: basePath, enabled: enabled}
 }
 
-func (m *Mirror) IsEnabled() bool  { return m.enabled }
+func (m *Mirror) IsEnabled() bool     { return m.enabled }
 func (m *Mirror) GetBasePath() string { return m.basePath }
 
 func (m *Mirror) SyncMemory(_ context.Context, mem *domain.Memory) error {

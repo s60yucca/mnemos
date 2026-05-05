@@ -194,7 +194,7 @@ func (g *QualityGate) Evaluate(req *domain.StoreRequest, recent []*domain.Memory
 	issues = append(issues, g.checkDensity(content)...)
 	issues = append(issues, g.checkNearDuplicate(content, recent)...)
 	issues = append(issues, g.checkSpecificity(content, req.Type)...)
-	
+
 	if req.Type == domain.MemoryTypeSkill {
 		issues = append(issues, g.validateSkillStructure(content)...)
 	}

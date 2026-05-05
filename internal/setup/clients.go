@@ -103,4 +103,12 @@ var Clients = map[string]ClientConfig{
 			GlobalPath: ".codex/config.toml",
 		},
 	},
+	"trae": {
+		Name:  "trae",
+		Files: []FileMapping{},
+		MCPConfig: MCPMapping{
+			LocalPath:  ".trae/mcp.json",
+			GlobalPath: "",
+		},
+	},
 }
