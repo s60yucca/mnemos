@@ -45,7 +45,7 @@ func NewManager(
 		embedStore: embedStore,
 		embedder:   embedder,
 		classifier: NewRuleClassifier(),
-		dedup:      NewContentDedup(store, embedStore, fuzzyThreshold, semanticThreshold),
+		dedup:      NewContentDedup(store, embedStore, embedder, fuzzyThreshold, semanticThreshold),
 		gate:       gate,
 		mirror:     mirror,
 		embedQueue: make(chan string, 1000),

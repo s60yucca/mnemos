@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/embedding"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	"github.com/mnemos-dev/mnemos/internal/util"
 )
@@ -17,11 +18,12 @@ type Deduplicator interface {
 type ContentDedup struct {
 	store             storage.IMemoryStore
 	embedStore        storage.IEmbeddingStore
+	embedder          embedding.IEmbeddingProvider
 	fuzzyThreshold    float64
 	semanticThreshold float64
 }
 
-func NewContentDedup(store storage.IMemoryStore, embedStore storage.IEmbeddingStore, fuzzyThreshold, semanticThreshold float64) *ContentDedup {
+func NewContentDedup(store storage.IMemoryStore, embedStore storage.IEmbeddingStore, embedder embedding.IEmbeddingProvider, fuzzyThreshold, semanticThreshold float64) *ContentDedup {
 	if fuzzyThreshold <= 0 {
 		fuzzyThreshold = 0.85
 	}
@@ -31,6 +33,7 @@ func NewContentDedup(store storage.IMemoryStore, embedStore storage.IEmbeddingSt
 	return &ContentDedup{
 		store:             store,
 		embedStore:        embedStore,
+		embedder:          embedder,
 		fuzzyThreshold:    fuzzyThreshold,
 		semanticThreshold: semanticThreshold,
 	}
@@ -77,14 +80,31 @@ func (d *ContentDedup) Check(ctx context.Context, req *domain.StoreRequest, hash
 		return bestFuzzy, "fuzzy", bestFuzzyScore, recent, nil
 	}
 
-	// Tier 3: semantic cosine similarity (only if embedding store available)
-	// Note: full semantic dedup requires embedding the incoming content which is async.
-	// This is intentionally deferred — the embed queue handles it post-store,
-	// and fuzzy Jaccard at tier 2 catches near-duplicates with high recall.
-	if d.embedStore == nil {
+	// Tier 3: semantic cosine similarity — embed incoming content and search vector store.
+	// Falls through silently when no embedding provider/store is available.
+	if d.embedder == nil || d.embedStore == nil {
 		return nil, "", 0, recent, nil
 	}
 
+	vec, err := d.embedder.Embed(ctx, req.Content)
+	if err != nil {
+		return nil, "", 0, recent, nil
+	}
+
+	semResults, err := d.embedStore.Search(ctx, storage.SemanticSearchQuery{
+		Vector:        vec,
+		ProjectID:     req.ProjectID,
+		MinSimilarity: d.semanticThreshold,
+		Limit:         1,
+	})
+	if err != nil || len(semResults) == 0 {
+		return nil, "", 0, recent, nil
+	}
+
+	best := semResults[0]
+	if best.Memory != nil {
+		return best.Memory, "semantic", best.HybridScore, recent, nil
+	}
 	return nil, "", 0, recent, nil
 }
 
