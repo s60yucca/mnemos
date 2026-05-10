@@ -124,6 +124,7 @@ func main() {
 	rootCmd.AddCommand(newBackfillCmd(mnemos))
 	rootCmd.AddCommand(newHealthCmd(cfg.DataDir))
 	rootCmd.AddCommand(newBenchCmd(cfg.DataDir))
+	rootCmd.AddCommand(newEvalCmd(mnemos))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)
