@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,15 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/benchmark"
 	"github.com/mnemos-dev/mnemos/internal/core"
+	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
+	coremem "github.com/mnemos-dev/mnemos/internal/core/memory"
+	"github.com/mnemos-dev/mnemos/internal/core/relation"
+	"github.com/mnemos-dev/mnemos/internal/core/search"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/embedding"
+	"github.com/mnemos-dev/mnemos/internal/observe"
+	"github.com/mnemos-dev/mnemos/internal/storage/markdown"
+	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,11 +48,10 @@ func TestDogfoodSimulation_EndToEnd(t *testing.T) {
 	logsDir := filepath.Join(dataDir, "logs")
 	require.NoError(t, os.MkdirAll(logsDir, 0755))
 
-	// Create features.log file
+	// Create features.log file and redirect observe output
 	featuresLog := filepath.Join(logsDir, "features.log")
-	logFile, err := os.Create(featuresLog)
-	require.NoError(t, err)
-	logFile.Close()
+	observe.SetLogPath(featuresLog)
+	t.Cleanup(func() { observe.SetLogPath("") })
 
 	mn := buildTestMnemos(t)
 
@@ -189,6 +197,7 @@ func simulateKiroTask(t *testing.T, ctx context.Context, mn *core.Mnemos, tracke
 	// Start session
 	category := []string{"feature", "refactor", "debug", "docs"}[taskNum%4]
 	tracker.StartSession(projectID, category)
+	time.Sleep(1 * time.Millisecond) // ensure non-zero duration
 
 	// Simulate realistic MCP calls
 	queries := []string{
@@ -375,4 +384,32 @@ func parseInt64(s string) int64 {
 	var v int64
 	fmt.Sscanf(s, "%d", &v)
 	return v
+}
+
+func buildTestMnemos(t *testing.T) *core.Mnemos {
+	t.Helper()
+
+	db, err := sqlitestore.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	store := sqlitestore.NewSQLiteStore(db)
+	embedStore := sqlitestore.NewEmbeddingStore(db)
+	fts := sqlitestore.NewFTSSearcher(db)
+	relStore := sqlitestore.NewRelationStore(db)
+
+	embedder := embedding.NewNoopProvider(384)
+	mir := markdown.NewMirror(t.TempDir(), false)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	memMgr := coremem.NewManager(store, embedStore, embedder, mir, 0.85, 0.92, logger, nil)
+	t.Cleanup(func() { memMgr.Stop() })
+
+	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger, 0.7, 0.0)
+	relMgr := relation.NewManager(relStore, store, logger)
+	lcEngine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, logger)
+
+	return core.NewMnemos(memMgr, searchEng, relMgr, lcEngine, store, logger)
 }

@@ -108,3 +108,15 @@ var getLogPath = func() string {
 	}
 	return filepath.Join(home, ".mnemos", "logs", "features.log")
 }
+
+// SetLogPath overrides the path where Feature() writes events.
+// Call with empty string to restore the default (home-dir-based) path.
+// Intended for tests; not safe for concurrent use after Feature() has been called.
+func SetLogPath(path string) {
+	prev := getLogPath
+	if path == "" {
+		getLogPath = prev
+	} else {
+		getLogPath = func() string { return path }
+	}
+}

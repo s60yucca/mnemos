@@ -1,5 +1,3 @@
-//go:build benchmark
-
 package benchmark
 
 import "github.com/mnemos-dev/mnemos/internal/domain"
