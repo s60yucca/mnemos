@@ -40,7 +40,7 @@ func buildEvalMnemos(t *testing.T) *core.Mnemos {
 
 	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger, 0.7, 0.0)
 	relMgr := relation.NewManager(relStore, store, logger)
-	lc := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, logger)
+	lc := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, false, logger)
 	return core.NewMnemos(memMgr, searchEng, relMgr, lc, store, logger)
 }
 
@@ -52,7 +52,7 @@ func TestEval_EmptyProject(t *testing.T) {
 		cmd.SetArgs([]string{"--project", "nonexistent"})
 		_ = cmd.Execute()
 	})
-	assert.Contains(t, out, "No memories found")
+	assert.Contains(t, out, "Total: 0 active")
 }
 
 func TestEval_WithMemories(t *testing.T) {
@@ -89,7 +89,7 @@ func TestEval_WithMemories(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "Knowledge Base Evaluation")
-	assert.Contains(t, out, "Total memories: 5")
+	assert.Contains(t, out, "Total: 5 active")
 	assert.Contains(t, out, "Quality Score Distribution")
 	assert.Contains(t, out, "Memory Type Distribution")
 	assert.Contains(t, out, "Category Coverage")
@@ -127,7 +127,7 @@ func TestEval_DuplicationDetection(t *testing.T) {
 		_ = cmd.Execute()
 	})
 
-	assert.Contains(t, out, "Total memories: 2")
+	assert.Contains(t, out, "Total: 2 active")
 	hasDupPair := strings.Contains(out, "duplicate pairs: 1") || strings.Contains(out, "duplicate pair")
 	assert.True(t, hasDupPair, "expected duplication to be reported, got:\n%s", out)
 }

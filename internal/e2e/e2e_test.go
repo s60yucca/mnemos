@@ -38,7 +38,7 @@ func newTestMnemos(t *testing.T) *core.Mnemos {
 	memManager := coremem.NewManager(memStore, embedStore, embedProvider, mirror, 0.85, 0.92, logger, nil)
 	searchEngine := search.NewSearchEngine(fts, embedStore, embedProvider, relStore, logger, 0.7, 0.0)
 	relManager := relation.NewManager(relStore, memStore, logger)
-	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, logger)
+	lcEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, false, logger)
 
 	m := core.NewMnemos(memManager, searchEngine, relManager, lcEngine, memStore, logger)
 

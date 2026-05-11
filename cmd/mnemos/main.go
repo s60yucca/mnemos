@@ -103,6 +103,7 @@ func main() {
 		decayInterval,
 		cfg.Lifecycle.GCRetentionDays,
 		cfg.Lifecycle.ArchiveThreshold,
+		cfg.Lifecycle.AutoArchive,
 		logger,
 	)
 

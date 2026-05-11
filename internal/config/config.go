@@ -75,6 +75,7 @@ type LifecycleConfig struct {
 	DecayInterval    time.Duration `mapstructure:"decay_interval"`
 	GCRetentionDays  int           `mapstructure:"gc_retention_days"`
 	ArchiveThreshold float64       `mapstructure:"archive_threshold"`
+	AutoArchive      bool          `mapstructure:"auto_archive"`
 }
 
 type DedupConfig struct {
@@ -123,6 +124,7 @@ func DefaultConfig() *Config {
 			DecayInterval:    24 * time.Hour,
 			GCRetentionDays:  30,
 			ArchiveThreshold: 0.1,
+			AutoArchive:      false,
 		},
 		Dedup: DedupConfig{
 			FuzzyThreshold:    0.85,

@@ -409,7 +409,7 @@ func buildTestMnemos(t *testing.T) *core.Mnemos {
 
 	searchEng := search.NewSearchEngine(fts, embedStore, embedder, relStore, logger, 0.7, 0.0)
 	relMgr := relation.NewManager(relStore, store, logger)
-	lcEngine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, logger)
+	lcEngine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, false, logger)
 
 	return core.NewMnemos(memMgr, searchEng, relMgr, lcEngine, store, logger)
 }

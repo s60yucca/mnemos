@@ -16,6 +16,7 @@ type Engine struct {
 	decayInterval    time.Duration
 	gcRetentionDays  int
 	archiveThreshold float64
+	autoArchive      bool
 	logger           *slog.Logger
 	stopCh           chan struct{}
 	stopOnce         sync.Once
@@ -26,6 +27,7 @@ func NewEngine(
 	decayInterval time.Duration,
 	gcRetentionDays int,
 	archiveThreshold float64,
+	autoArchive bool,
 	logger *slog.Logger,
 ) *Engine {
 	if decayInterval <= 0 {
@@ -42,6 +44,7 @@ func NewEngine(
 		decayInterval:    decayInterval,
 		gcRetentionDays:  gcRetentionDays,
 		archiveThreshold: archiveThreshold,
+		autoArchive:      autoArchive,
 		logger:           logger,
 		stopCh:           make(chan struct{}),
 	}
@@ -74,7 +77,8 @@ func (e *Engine) Stop() {
 	e.stopOnce.Do(func() { close(e.stopCh) })
 }
 
-// RunDecay computes and applies decay scores for all active memories
+// RunDecay computes and applies decay scores for all active memories.
+// Archival is only performed when autoArchive is enabled.
 func (e *Engine) RunDecay(ctx context.Context, projectID string) error {
 	memories, err := e.store.ListForLifecycle(ctx, storage.LifecycleQuery{
 		ProjectID: projectID,
@@ -93,7 +97,9 @@ func (e *Engine) RunDecay(ctx context.Context, projectID string) error {
 		newScore := ComputeDecayScore(mem, now)
 		updates = append(updates, storage.BulkUpdateItem{ID: mem.ID, Score: newScore})
 		if newScore < e.archiveThreshold {
-			toArchive = append(toArchive, mem.ID)
+			if e.autoArchive {
+				toArchive = append(toArchive, mem.ID)
+			}
 		}
 	}
 
@@ -103,14 +109,18 @@ func (e *Engine) RunDecay(ctx context.Context, projectID string) error {
 		}
 	}
 
-	if len(toArchive) > 0 {
+	if e.autoArchive && len(toArchive) > 0 {
 		if err := e.store.BulkUpdateStatus(ctx, toArchive, domain.MemoryStatusArchived); err != nil {
 			return err
 		}
 		e.logger.Info("archived memories", "count", len(toArchive))
 	}
 
-	e.logger.Info("decay run complete", "processed", len(memories), "archived", len(toArchive))
+	archived := len(toArchive)
+	if !e.autoArchive && archived > 0 {
+		archived = 0
+	}
+	e.logger.Info("decay run complete", "processed", len(memories), "archived", archived)
 	return nil
 }
 

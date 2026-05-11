@@ -42,8 +42,8 @@ func TestComputeDecayScore_TypeRates(t *testing.T) {
 		scores[t] = ComputeDecayScore(mem, now)
 	}
 
-	// short_term decays fastest, semantic slowest
-	assert.Greater(t, scores[domain.MemoryTypeSemantic], scores[domain.MemoryTypeLongTerm])
+	// Persistent types (long_term, semantic) decay slowest; short_term decays fastest
+	assert.GreaterOrEqual(t, scores[domain.MemoryTypeSemantic], scores[domain.MemoryTypeLongTerm])
 	assert.Greater(t, scores[domain.MemoryTypeLongTerm], scores[domain.MemoryTypeEpisodic])
 	assert.Greater(t, scores[domain.MemoryTypeEpisodic], scores[domain.MemoryTypeShortTerm])
 }

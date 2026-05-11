@@ -51,7 +51,7 @@ func newTestServer(t *testing.T) (*Server, *core.Mnemos, string) {
 
 	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, embedProvider, relStore, slog.Default(), 0.7, 1.5)
 	relManager := relation.NewManager(relStore, memStore, slog.Default())
-	lifecycleEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, slog.Default())
+	lifecycleEngine := lifecycle.NewEngine(memStore, 24*time.Hour, 30, 0.1, false, slog.Default())
 
 	// Create mnemos facade
 	mnemos := core.NewMnemos(memManager, searchEngine, relManager, lifecycleEngine, memStore, slog.Default())

@@ -22,23 +22,25 @@ func (t MemoryType) IsValid() bool {
 
 func (t MemoryType) String() string { return string(t) }
 
-// DefaultDecayRate returns the type-specific lambda for exponential decay
+// DefaultDecayRate returns the type-specific lambda for exponential decay.
+// Persistent types (long_term, semantic) decay over years.
+// Transient types (short_term) decay over weeks.
 func (t MemoryType) DefaultDecayRate() float64 {
 	switch t {
 	case MemoryTypeShortTerm:
-		return 0.1
+		return 0.05
 	case MemoryTypeLongTerm:
-		return 0.005
+		return 0.0001
 	case MemoryTypeEpisodic:
-		return 0.02
-	case MemoryTypeSemantic:
-		return 0.001
-	case MemoryTypeSkill:
-		return 0.010
-	case MemoryTypeCompiled:
 		return 0.005
+	case MemoryTypeSemantic:
+		return 0.0001
+	case MemoryTypeSkill:
+		return 0.002
+	case MemoryTypeCompiled:
+		return 0.001
 	default:
-		return 0.02
+		return 0.005
 	}
 }
 

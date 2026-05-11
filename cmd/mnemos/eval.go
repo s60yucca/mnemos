@@ -48,10 +48,14 @@ is compiling usefully or accumulating noise.`,
 			}
 
 			printEvalHeader(project, len(memories), stats)
+			if len(memories) == 0 {
+				if archived := stats.ByStatus["archived"]; archived > 0 {
+					fmt.Printf("(%d archived memories exist — run 'mnemos maintain' to restore or review them.)\n", archived)
+				}
 				return nil
 			}
 
-			printEvalHeader(project, len(memories))
+			printEvalHeader(project, len(memories), stats)
 			printQualityDistribution(memories)
 			printTypeDistribution(memories)
 			printCategoryCoverage(memories)
@@ -67,13 +71,21 @@ is compiling usefully or accumulating noise.`,
 	return cmd
 }
 
-func printEvalHeader(project string, total int) {
+func printEvalHeader(project string, total int, stats *storage.Stats) {
 	scope := project
 	if scope == "" {
 		scope = "(all projects)"
 	}
 	fmt.Printf("Knowledge Base Evaluation — %s\n", scope)
-	fmt.Printf("  Total memories: %d\n\n", total)
+	fmt.Printf("  Total: %d active", total)
+	if archived := stats.ByStatus["archived"]; archived > 0 {
+		fmt.Printf(" | %d archived", archived)
+	}
+	if deleted := stats.ByStatus["deleted"]; deleted > 0 {
+		fmt.Printf(" | %d deleted", deleted)
+	}
+	fmt.Println()
+	fmt.Println()
 }
 
 func printQualityDistribution(memories []*domain.Memory) {

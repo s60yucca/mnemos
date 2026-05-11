@@ -132,6 +132,7 @@ func buildLightMnemos(cfg *config.Config) (*core.Mnemos, func(), error) {
 		decayInterval,
 		cfg.Lifecycle.GCRetentionDays,
 		cfg.Lifecycle.ArchiveThreshold,
+		cfg.Lifecycle.AutoArchive,
 		logger,
 	)
 

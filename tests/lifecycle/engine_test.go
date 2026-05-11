@@ -21,7 +21,7 @@ func newTestEngine(t *testing.T) (*lifecycle.Engine, *sqlitestore.SQLiteStore) {
 	require.NoError(t, err)
 	store := sqlitestore.NewSQLiteStore(db)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	engine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, logger)
+	engine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, false, logger)
 	t.Cleanup(func() { db.Close() })
 	return engine, store
 }
@@ -59,7 +59,13 @@ func TestEngine_RunDecay_ReducesScore(t *testing.T) {
 }
 
 func TestEngine_RunDecay_ArchivesLowScore(t *testing.T) {
-	engine, store := newTestEngine(t)
+	db, err := sqlitestore.Open(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	store := sqlitestore.NewSQLiteStore(db)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	// autoArchive=true to test archival behavior explicitly
+	engine := lifecycle.NewEngine(store, 24*time.Hour, 30, 0.1, true, logger)
 	ctx := context.Background()
 	mem := createMemoryWithAge(t, store, "very old memory", "", 10000, domain.MemoryStatusActive)
 	require.NoError(t, engine.RunDecay(ctx, ""))
@@ -146,7 +152,7 @@ func TestEngine_Defaults(t *testing.T) {
 	defer db.Close()
 	store := sqlitestore.NewSQLiteStore(db)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	engine := lifecycle.NewEngine(store, 0, 0, 0, logger)
+	engine := lifecycle.NewEngine(store, 0, 0, 0, false, logger)
 	assert.NotNil(t, engine)
 	require.NoError(t, engine.RunDecay(context.Background(), ""))
 	require.NoError(t, engine.RunGC(context.Background(), ""))

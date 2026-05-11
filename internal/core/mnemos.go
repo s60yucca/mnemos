@@ -200,7 +200,19 @@ func (m *Mnemos) Traverse(ctx context.Context, q domain.GraphQuery) (*domain.Gra
 
 // AssembleContext builds a context bundle for a query
 func (m *Mnemos) AssembleContext(ctx context.Context, query, projectID string, maxTokens int, includeRelations bool, openFiles []string) (*search.ContextResult, error) {
-	return m.searchEngine.AssembleContext(ctx, query, projectID, maxTokens, includeRelations, openFiles)
+	result, err := m.searchEngine.AssembleContext(ctx, query, projectID, maxTokens, includeRelations, openFiles)
+	if err != nil {
+		return nil, err
+	}
+	// Touch access on every returned memory so retrieval counts as usage.
+	// This prevents persistent knowledge from decaying as if never accessed.
+	for _, mem := range result.Memories {
+		mem.TouchAccess()
+		if err := m.store.Update(ctx, mem); err != nil {
+			m.logger.Warn("touch access failed", "id", mem.ID, "err", err)
+		}
+	}
+	return result, nil
 }
 
 // Maintain runs decay, archival, and GC
