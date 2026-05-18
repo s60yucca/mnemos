@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/storage"
 	"github.com/mnemos-dev/mnemos/internal/util"
 )
 
@@ -188,6 +189,91 @@ func TestDaemon_DryRun(t *testing.T) {
 	}
 	if rel != nil {
 		t.Error("expected no relation in dry run, but one was created")
+	}
+}
+
+func TestDaemon_AutoCompileCreatesArticle(t *testing.T) {
+	env, w := newDaemonTestEnv(t)
+	ctx := context.Background()
+	projectID := "proj-auto-compile"
+	now := time.Now().UTC()
+
+	for i := 0; i < 5; i++ {
+		createMemory(t, env.store, util.NewID(), projectID,
+			"memory about internal/storage/sqlite/store.go and automatic knowledge compilation",
+			domain.MemoryTypeSemantic, now.Add(time.Duration(i)*time.Minute), now.Add(time.Duration(i)*time.Minute))
+	}
+
+	daemon := newTestDaemon(env, w)
+	daemon.cfg.MinAutoCompileSources = 5
+	findings, err := daemon.RunOnce(ctx, projectID, false)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	hasAutoCompile := false
+	for _, finding := range findings {
+		if finding.Type == FindingAutoCompiled {
+			hasAutoCompile = true
+		}
+	}
+	if !hasAutoCompile {
+		t.Fatalf("expected auto compile finding, got %#v", findings)
+	}
+
+	articles, err := env.mnemos.GetCompiledArticles(ctx, projectID, 10)
+	if err != nil {
+		t.Fatalf("GetCompiledArticles: %v", err)
+	}
+	if len(articles) != 1 {
+		t.Fatalf("expected one compiled article, got %d", len(articles))
+	}
+	if articles[0].Metadata["compiled_by"] != "autopilot" {
+		t.Fatalf("expected compiled_by=autopilot, got %q", articles[0].Metadata["compiled_by"])
+	}
+
+	relations, err := env.mnemos.ListRelations(ctx, storage.RelationQuery{
+		MemoryID:      articles[0].ID,
+		RelationTypes: []domain.RelationType{domain.RelationTypeCompiledFrom},
+	})
+	if err != nil {
+		t.Fatalf("ListRelations: %v", err)
+	}
+	if len(relations) != 5 {
+		t.Fatalf("expected 5 compiled_from relations, got %d", len(relations))
+	}
+}
+
+func TestDaemon_AutoCompileSkipsWhenTooFewSources(t *testing.T) {
+	env, _ := newDaemonTestEnv(t)
+	ctx := context.Background()
+	projectID := "proj-auto-compile-skip"
+	now := time.Now().UTC()
+
+	for i := 0; i < 4; i++ {
+		createMemory(t, env.store, util.NewID(), projectID,
+			"memory about internal/storage/sqlite/store.go",
+			domain.MemoryTypeSemantic, now.Add(time.Duration(i)*time.Minute), now.Add(time.Duration(i)*time.Minute))
+	}
+
+	daemon := newTestDaemon(env, &mockWriter{})
+	daemon.cfg.MinAutoCompileSources = 5
+	findings, err := daemon.RunOnce(ctx, projectID, false)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	for _, finding := range findings {
+		if finding.Type == FindingAutoCompiled {
+			t.Fatalf("did not expect auto compile finding, got %#v", findings)
+		}
+	}
+
+	articles, err := env.mnemos.GetCompiledArticles(ctx, projectID, 10)
+	if err != nil {
+		t.Fatalf("GetCompiledArticles: %v", err)
+	}
+	if len(articles) != 0 {
+		t.Fatalf("expected no compiled articles, got %d", len(articles))
 	}
 }
 

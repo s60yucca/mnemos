@@ -21,6 +21,8 @@ type AutopilotConfig struct {
 	ContradictionEnabled   bool          `mapstructure:"contradiction_enabled"`
 	ContradictionThreshold float64       `mapstructure:"contradiction_threshold"`
 	MaxBackfillPerRun      int           `mapstructure:"max_backfill_per_run"`
+	AutoCompileEnabled     bool          `mapstructure:"auto_compile_enabled"`
+	MinAutoCompileSources  int           `mapstructure:"min_auto_compile_sources"`
 }
 
 // Config holds all application configuration
@@ -178,6 +180,8 @@ func DefaultConfig() *Config {
 			ContradictionEnabled:   false,
 			ContradictionThreshold: 0.3,
 			MaxBackfillPerRun:      50,
+			AutoCompileEnabled:     true,
+			MinAutoCompileSources:  5,
 		},
 	}
 }
@@ -216,6 +220,8 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	v.SetDefault("hook.mmr_lambda", cfg.Hook.MMRLambda)
 	v.SetDefault("hook.file_boost", cfg.Hook.FileBoost)
 	v.SetDefault("autopilot.max_backfill_per_run", 50)
+	v.SetDefault("autopilot.auto_compile_enabled", true)
+	v.SetDefault("autopilot.min_auto_compile_sources", 5)
 
 	v.SetEnvPrefix("MNEMOS")
 	v.AutomaticEnv()

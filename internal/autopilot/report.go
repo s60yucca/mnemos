@@ -91,6 +91,16 @@ func Format(findings []Finding, timestamp time.Time) string {
 		}
 	}
 
+	autoCompiled := filterFindings(findings, FindingAutoCompiled)
+	if len(autoCompiled) > 0 {
+		lines = append(lines, fmt.Sprintf("**Auto-compiled articles** (%d):", len(autoCompiled)))
+		for _, f := range autoCompiled {
+			topic, _ := f.Metadata["topic"].(string)
+			count, _ := f.Metadata["source_count"].(int)
+			lines = append(lines, fmt.Sprintf("- %q compiled from %d source memories.", topic, count))
+		}
+	}
+
 	lines = append(lines, "")
 	lines = append(lines, "**Suggestion**: "+buildSuggestion(findings))
 
@@ -123,6 +133,10 @@ func buildSuggestion(findings []Finding) string {
 			memB = memB[:8]
 		}
 		return fmt.Sprintf("Review memories %s... and %s... for conflicts.", memA, memB)
+	}
+	autoCompiled := filterFindings(findings, FindingAutoCompiled)
+	if len(autoCompiled) > 0 {
+		return "A new compiled knowledge article was created automatically."
 	}
 	return "No actionable findings."
 }

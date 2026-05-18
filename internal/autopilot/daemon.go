@@ -230,6 +230,21 @@ func (d *AutopilotDaemon) RunOnce(ctx context.Context, projectID string, dryRun 
 		findings = append(findings, d.safeDetect(ctx, det, projectID, maps)...)
 	}
 
+	if !dryRun {
+		if result, err := d.autoCompileProject(ctx, projectID, memories); err != nil {
+			d.logger.Warn("autopilot auto-compile failed", "project_id", projectID, "err", err)
+		} else if result.Compiled {
+			findings = append(findings, Finding{
+				Type: FindingAutoCompiled,
+				Metadata: map[string]any{
+					"article_id":   result.ArticleID,
+					"topic":        result.Topic,
+					"source_count": result.SourceCount,
+				},
+			})
+		}
+	}
+
 	if !dryRun && len(findings) > 0 {
 		if err := d.writer.Write(ctx, projectID, findings); err != nil {
 			d.logger.Error("autopilot report write failed", "project_id", projectID, "err", err)

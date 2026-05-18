@@ -97,9 +97,11 @@ func linkCompiledFrom(t *testing.T, relStore *sqlitestore.RelationStore, article
 
 func defaultCfg() config.AutopilotConfig {
 	return config.AutopilotConfig{
-		Enabled:           true,
-		MaxCompiledPerRun: 50,
-		MaxMemoriesPerRun: 200,
+		Enabled:               true,
+		MaxCompiledPerRun:     50,
+		MaxMemoriesPerRun:     200,
+		AutoCompileEnabled:    true,
+		MinAutoCompileSources: 5,
 	}
 }
 

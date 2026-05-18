@@ -16,6 +16,7 @@ const (
 	FindingStaleCompiled          FindingType = "stale_compiled"
 	FindingRelationsCreated       FindingType = "relations_created"
 	FindingPotentialContradiction FindingType = "potential_contradiction"
+	FindingAutoCompiled           FindingType = "auto_compiled"
 )
 
 // Finding is a single observation produced by a detector.

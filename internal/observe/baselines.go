@@ -45,7 +45,7 @@ var Baselines = map[string]Baseline{
 	"compile": {
 		MinDaily:        1,
 		RatioVsMCPCalls: 0.0,
-		Expected:        "Manual compile operations",
+		Expected:        "Autopilot compile checks and compile operations",
 	},
 	"decay": {
 		MinDaily:        1,
