@@ -94,11 +94,13 @@ func TestEval_WithMemories(t *testing.T) {
 	assert.Contains(t, out, "Memory Type Distribution")
 	assert.Contains(t, out, "Category Coverage")
 	assert.Contains(t, out, "Duplication")
-	assert.Contains(t, out, "Staleness")
+	assert.Contains(t, out, "Freshness")
+	assert.Contains(t, out, "Retrieval Usefulness")
 	assert.Contains(t, out, "Overall Score")
 	assert.Contains(t, out, "code")
 	assert.Contains(t, out, "database")
 	assert.Contains(t, out, "A (")
+	assert.Equal(t, 1, strings.Count(out, "Knowledge Base Evaluation"))
 }
 
 func TestEval_DuplicationDetection(t *testing.T) {
@@ -130,4 +132,51 @@ func TestEval_DuplicationDetection(t *testing.T) {
 	assert.Contains(t, out, "Total: 2 active")
 	hasDupPair := strings.Contains(out, "duplicate pairs: 1") || strings.Contains(out, "duplicate pair")
 	assert.True(t, hasDupPair, "expected duplication to be reported, got:\n%s", out)
+}
+
+func TestEval_HeaderPrintedOnceForEmptyProject(t *testing.T) {
+	mn := buildEvalMnemos(t)
+	cmd := newEvalCmd(mn)
+
+	out := captureStdout(t, func() {
+		cmd.SetArgs([]string{"--project", "empty-eval"})
+		_ = cmd.Execute()
+	})
+
+	assert.Equal(t, 1, strings.Count(out, "Knowledge Base Evaluation"))
+}
+
+func TestEval_LowRelevanceDoesNotLowerQualityScore(t *testing.T) {
+	now := time.Now().UTC()
+	memories := []*domain.Memory{
+		{
+			ID:             "m1",
+			Content:        "PostgreSQL migrations use goose with timestamped files",
+			QualityScore:   0.95,
+			RelevanceScore: 0.05,
+			LastAccessedAt: now,
+			Status:         domain.MemoryStatusActive,
+		},
+		{
+			ID:             "m2",
+			Content:        "React settings panels keep destructive actions in modal confirmations",
+			QualityScore:   0.95,
+			RelevanceScore: 0.05,
+			LastAccessedAt: now,
+			Status:         domain.MemoryStatusActive,
+		},
+	}
+
+	out := captureStdout(t, func() {
+		printFreshness(memories)
+		printRetrievalUsefulness(memories)
+		printOverallScore(memories)
+	})
+
+	assert.Contains(t, out, "Freshness")
+	assert.Contains(t, out, "Retrieval Usefulness")
+	assert.Contains(t, out, "Low retrieval signal")
+	assert.Contains(t, out, "Overall Score: 0.95 (A)")
+	assert.NotContains(t, out, "Low relevance (<0.2):    2")
+	assert.NotContains(t, out, "(F)")
 }

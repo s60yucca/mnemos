@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -331,8 +332,9 @@ func TestClassifyFeature_LowActivity(t *testing.T) {
 	}
 }
 
-func TestClassifyFeature_NotFiring(t *testing.T) {
-	// Create events with 3 consecutive days of no activity
+func TestClassifyFeature_ObservedBelowBaselineIsLowActivity(t *testing.T) {
+	// Create events with 3 consecutive days of no activity, but with the feature
+	// still observed in the window. This should be LOW ACTIVITY, not not observed.
 	baseline := observe.Baseline{
 		MinDaily:        2,
 		RatioVsMCPCalls: 0.0,
@@ -354,8 +356,8 @@ func TestClassifyFeature_NotFiring(t *testing.T) {
 		}
 	}
 
-	// Add feature events only on days 0, 1, 5, 6 (days 2, 3, 4 have zero - 3 consecutive)
-	for _, day := range []int{0, 1, 5, 6} {
+	// Add feature events only on days 0 and 6 (days 1-5 have zero - 5 consecutive)
+	for _, day := range []int{0, 6} {
 		dayTime := baseTime.Add(time.Duration(day) * 24 * time.Hour)
 		for i := 0; i < 3; i++ {
 			events = append(events, Event{
@@ -376,8 +378,59 @@ func TestClassifyFeature_NotFiring(t *testing.T) {
 	}
 
 	status := classifyFeature(featureEvents, events, baseline, activeDays)
+	if status != StatusLow {
+		t.Errorf("expected StatusLow, got %v", status)
+	}
+}
+
+func TestClassifyFeature_NotObserved(t *testing.T) {
+	baseline := observe.Baseline{
+		MinDaily:        2,
+		RatioVsMCPCalls: 0.0,
+		Expected:        "Daily feature",
+	}
+
+	var events []Event
+	baseTime := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 20; i++ {
+		events = append(events, Event{
+			Timestamp: baseTime.Add(time.Duration(i) * time.Hour),
+			Feature:   "store_call",
+			Attrs:     map[string]string{"project": "test"},
+		})
+	}
+
+	status := classifyFeature(nil, events, baseline, detectActiveDays(events))
 	if status != StatusNotFiring {
 		t.Errorf("expected StatusNotFiring, got %v", status)
+	}
+	if status.String() != "NOT OBSERVED" {
+		t.Errorf("expected NOT OBSERVED label, got %q", status.String())
+	}
+}
+
+func TestRenderReport_LowActivityShowsLastSeen(t *testing.T) {
+	lastSeen := time.Date(2026, 4, 17, 14, 30, 0, 0, time.UTC)
+	events := []Event{
+		{Timestamp: lastSeen, Feature: "quality_gate", Attrs: map[string]string{"action": "accept"}},
+	}
+	classifications := map[string]Status{
+		"quality_gate": StatusLow,
+		"compile":      StatusNotFiring,
+	}
+
+	out := renderReport(classifications, events, 7)
+	if !strings.Contains(out, "LOW ACTIVITY (1)") {
+		t.Fatalf("expected low activity section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "quality_gate") || !strings.Contains(out, "Last seen:") {
+		t.Fatalf("expected low activity feature with last seen, got:\n%s", out)
+	}
+	if strings.Contains(out, "NOT FIRING") {
+		t.Fatalf("did not expect old NOT FIRING label, got:\n%s", out)
+	}
+	if !strings.Contains(out, "NOT OBSERVED (1)") {
+		t.Fatalf("expected not observed section, got:\n%s", out)
 	}
 }
 

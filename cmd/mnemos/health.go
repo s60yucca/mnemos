@@ -35,7 +35,7 @@ func (s Status) String() string {
 	case StatusLow:
 		return "LOW ACTIVITY"
 	case StatusNotFiring:
-		return "NOT FIRING"
+		return "NOT OBSERVED"
 	default:
 		return "UNKNOWN"
 	}
@@ -120,9 +120,13 @@ func parseLog(logPath string, since time.Time, projectFilter string) ([]Event, e
 // classifyFeature determines the health status of a feature based on events and baseline
 // allEvents should contain ALL events (including MCP calls), featureEvents should contain only the feature's events
 func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.Baseline, activeDays []time.Time) Status {
-	if len(activeDays) == 0 {
-		// No active days in window - cannot classify
+	if len(featureEvents) == 0 {
 		return StatusNotFiring
+	}
+
+	if len(activeDays) == 0 {
+		// The feature fired, but there is not enough MCP activity to compare against baselines.
+		return StatusLow
 	}
 
 	// Group feature events by day
@@ -139,25 +143,6 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 			day := event.Timestamp.Format("2006-01-02")
 			mcpCallsByDay[day]++
 		}
-	}
-
-	// Check for NOT FIRING: 0 events on ≥ 3 consecutive active days
-	consecutiveZeroDays := 0
-	maxConsecutiveZeroDays := 0
-	for _, activeDay := range activeDays {
-		dayStr := activeDay.Format("2006-01-02")
-		if eventsByDay[dayStr] == 0 {
-			consecutiveZeroDays++
-			if consecutiveZeroDays > maxConsecutiveZeroDays {
-				maxConsecutiveZeroDays = consecutiveZeroDays
-			}
-		} else {
-			consecutiveZeroDays = 0
-		}
-	}
-
-	if maxConsecutiveZeroDays >= 3 {
-		return StatusNotFiring
 	}
 
 	// Classify based on baseline type
@@ -182,7 +167,7 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 		}
 
 		if daysWithData == 0 {
-			return StatusNotFiring
+			return StatusLow
 		}
 
 		percentAbove := float64(daysAboveThreshold) / float64(daysWithData)
@@ -205,10 +190,7 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 	if percentAbove >= 0.5 {
 		return StatusFiring
 	}
-	if percentAbove > 0 {
-		return StatusLow
-	}
-	return StatusNotFiring
+	return StatusLow
 }
 
 // detectActiveDays identifies days with ≥ ActiveDayThreshold MCP calls
@@ -251,7 +233,7 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 	// Group features by status
 	firing := []string{}
 	low := []string{}
-	notFiring := []string{}
+	notObserved := []string{}
 
 	for feature, status := range classifications {
 		switch status {
@@ -260,7 +242,7 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 		case StatusLow:
 			low = append(low, feature)
 		case StatusNotFiring:
-			notFiring = append(notFiring, feature)
+			notObserved = append(notObserved, feature)
 		}
 	}
 
@@ -280,25 +262,20 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 		for _, feature := range low {
 			baseline := observe.Baselines[feature]
 			output.WriteString(fmt.Sprintf("  • %s: %s\n", feature, baseline.Expected))
+			if lastSeen := lastSeenForFeature(events, feature); !lastSeen.IsZero() {
+				output.WriteString(fmt.Sprintf("    Last seen: %s (local)\n", lastSeen.Local().Format("2006-01-02 15:04:05")))
+			}
 		}
 		output.WriteString("\n")
 	}
 
-	// Display NOT FIRING
-	if len(notFiring) > 0 {
-		output.WriteString("✗ NOT FIRING (" + fmt.Sprintf("%d", len(notFiring)) + ")\n")
-		for _, feature := range notFiring {
+	// Display NOT OBSERVED
+	if len(notObserved) > 0 {
+		output.WriteString("✗ NOT OBSERVED (" + fmt.Sprintf("%d", len(notObserved)) + ")\n")
+		for _, feature := range notObserved {
 			baseline := observe.Baselines[feature]
 			output.WriteString(fmt.Sprintf("  • %s: %s\n", feature, baseline.Expected))
-
-			// Find last seen timestamp
-			var lastSeen time.Time
-			for _, event := range events {
-				if event.Feature == feature && event.Timestamp.After(lastSeen) {
-					lastSeen = event.Timestamp
-				}
-			}
-			if !lastSeen.IsZero() {
+			if lastSeen := lastSeenForFeature(events, feature); !lastSeen.IsZero() {
 				output.WriteString(fmt.Sprintf("    Last seen: %s (local)\n", lastSeen.Local().Format("2006-01-02 15:04:05")))
 			}
 		}
@@ -306,6 +283,16 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 	}
 
 	return output.String()
+}
+
+func lastSeenForFeature(events []Event, feature string) time.Time {
+	var lastSeen time.Time
+	for _, event := range events {
+		if event.Feature == feature && event.Timestamp.After(lastSeen) {
+			lastSeen = event.Timestamp
+		}
+	}
+	return lastSeen
 }
 
 // renderFeatureDetail generates deep-dive output for a specific feature
