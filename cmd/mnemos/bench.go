@@ -146,7 +146,7 @@ Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 			writer.Write([]string{
 				"session_id", "timestamp_start", "timestamp_end", "project_id", "mode",
 				"duration_ms", "tokens_in", "tokens_out", "mcp_calls_count",
-				"task_completed", "task_category",
+				"task_completed", "task_category", "provenance",
 			})
 
 			// Write rows
@@ -163,6 +163,7 @@ Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 					fmt.Sprintf("%d", session.MCPCallsCount),
 					fmt.Sprintf("%t", session.TaskCompleted),
 					session.TaskCategory,
+					session.Provenance,
 				})
 			}
 
@@ -270,6 +271,7 @@ Use this if you want to explicitly mark session boundaries.`,
 				"mode":       "unknown",
 				"category":   category,
 				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+				"provenance": "production",
 			})
 
 			fmt.Printf("Session started: %s\n", sessionID)
@@ -330,6 +332,7 @@ type SessionRecord struct {
 	MCPCallsCount  int
 	TaskCompleted  bool
 	TaskCategory   string
+	Provenance     string
 }
 
 // extractSessions parses features.log and extracts session records
@@ -408,6 +411,7 @@ func extractSessions(logPath string, since time.Time, projectFilter string, mode
 				ProjectID:      startAttrs["project_id"],
 				Mode:           startAttrs["mode"],
 				TaskCategory:   startAttrs["category"],
+				Provenance:     startAttrs["provenance"],
 			}
 
 			// Parse numeric fields

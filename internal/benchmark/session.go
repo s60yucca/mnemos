@@ -31,6 +31,7 @@ type Session struct {
 	MCPCallsCount int
 	TaskCompleted bool
 	TaskCategory  string
+	Provenance    string
 }
 
 // SessionTracker manages benchmark session tracking with automatic timeout detection.
@@ -126,6 +127,7 @@ func (t *SessionTracker) startSessionLocked(projectID string, category string) {
 		Mode:         t.benchMode,
 		StartTime:    time.Now(),
 		TaskCategory: category,
+		Provenance:   benchmarkProvenance(),
 	}
 
 	t.currentSession = session
@@ -138,7 +140,17 @@ func (t *SessionTracker) startSessionLocked(projectID string, category string) {
 		"mode":       string(session.Mode),
 		"category":   session.TaskCategory,
 		"timestamp":  session.StartTime.Format(time.RFC3339),
+		"provenance": session.Provenance,
 	})
+}
+
+func benchmarkProvenance() string {
+	switch value := os.Getenv("MNEMOS_BENCH_PROVENANCE"); value {
+	case "test", "fixture", "synthetic", "dry-run", "production":
+		return value
+	default:
+		return "production"
+	}
 }
 
 // EndSession finalizes the current session.

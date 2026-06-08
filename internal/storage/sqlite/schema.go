@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -128,6 +130,74 @@ func Open(path string) (*sql.DB, error) {
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, err
+	}
+	return db, nil
+}
+
+// OpenReadOnly opens an existing SQLite database without applying schema,
+// migrations, or writable connection settings.
+func OpenReadOnly(path string) (*sql.DB, error) {
+	if path == "" || path == ":memory:" {
+		return nil, fmt.Errorf("read-only sqlite requires an existing file path")
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("database does not exist: %s", path)
+		}
+		return nil, fmt.Errorf("stat sqlite database: %w", err)
+	}
+
+	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?mode=ro"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite read-only: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+
+	if _, err := db.Exec("PRAGMA query_only = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enable sqlite query_only: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping sqlite read-only: %w", err)
+	}
+	return db, nil
+}
+
+// OpenExistingWritable opens an existing database for narrowly scoped writes
+// without applying schema or migrations.
+func OpenExistingWritable(path string) (*sql.DB, error) {
+	if path == "" || path == ":memory:" {
+		return nil, fmt.Errorf("writable existing sqlite requires a file path")
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("database does not exist: %s", path)
+		}
+		return nil, fmt.Errorf("stat sqlite database: %w", err)
+	}
+
+	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?mode=rw"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite writable: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set sqlite busy timeout: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enable sqlite foreign keys: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping sqlite writable: %w", err)
 	}
 	return db, nil
 }

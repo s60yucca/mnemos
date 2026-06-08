@@ -165,6 +165,27 @@ func NewAutoInjector(mnemos *core.Mnemos, cfg AutoInjectConfig, dataDir string) 
 
 // Run performs auto-injection.
 func (a *AutoInjector) Run(ctx context.Context, sessionID, projectID, clientID string, existingIDs []string) (payload string, skipReason string, err error) {
+	start := time.Now()
+	injectedCount := 0
+	defer func() {
+		outcome := "ok"
+		if skipReason != "" {
+			outcome = "skipped:" + skipReason
+		}
+		if err != nil {
+			outcome = "error"
+		}
+		observe.Feature("auto_inject", map[string]any{
+			"project_id":   projectID,
+			"session_id":   sessionID,
+			"client_id":    clientID,
+			"outcome":      outcome,
+			"payload":      payload != "",
+			"tokens_used":  len(payload) / 4,
+			"duration_ms":  time.Since(start).Milliseconds(),
+			"memory_count": injectedCount,
+		})
+	}()
 	defer func() {
 		if r := recover(); r != nil {
 			payload = ""
@@ -237,6 +258,7 @@ func (a *AutoInjector) Run(ctx context.Context, sessionID, projectID, clientID s
 		return "", "no_memories", nil
 	}
 
+	injectedCount = len(filtered)
 	payload = formatAutoInjectPayload(filtered, projectID, a.cfg)
 
 	observe.Feature("auto_inject_payload", map[string]any{

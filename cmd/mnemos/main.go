@@ -16,10 +16,12 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/core/relation"
 	"github.com/mnemos-dev/mnemos/internal/core/search"
 	"github.com/mnemos-dev/mnemos/internal/embedding"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage/markdown"
 	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/mnemos-dev/mnemos/internal/transport/cli"
 	"github.com/mnemos-dev/mnemos/internal/util"
+	"github.com/spf13/cobra"
 )
 
 var version = "dev"
@@ -45,9 +47,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "config error:", err)
 		os.Exit(1)
 	}
+	observe.SetDataDir(cfg.DataDir)
+	_ = os.Setenv("MNEMOS_DATA_DIR", cfg.DataDir)
 
 	// Logger
 	logger := util.NewLogger(cfg.LogLevel, cfg.LogFormat)
+
+	if isCheckInvocation(os.Args[1:]) {
+		if err := runReadOnlyCheck(cfg, logger, resolveVersion()); err != nil {
+			if !isCheckFailure(err) {
+				fmt.Fprintln(os.Stderr, "check error:", err)
+			}
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Ensure data dir exists
 	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
@@ -109,13 +123,16 @@ func main() {
 
 	// Facade
 	mnemos := core.NewMnemos(memManager, searchEngine, relManager, lifecycleEngine, memStore, logger)
-	mnemos.Start()
 	defer mnemos.Shutdown()
 
-	// Autopilot daemon (started at application level to avoid circular import core→autopilot→core)
+	// Autopilot daemon is constructed for control commands, but only the server
+	// runtime owns background workers.
 	daemon := autopilot.NewAutopilotDaemon(mnemos, cfg.Autopilot, cfg.DataDir, logger, autopilot.NewReportWriter(mnemos))
-	daemon.Start()
-	defer daemon.Stop()
+	if isServerInvocation(os.Args[1:]) {
+		mnemos.Start()
+		daemon.Start()
+		defer daemon.Stop()
+	}
 
 	// CLI
 	rootCmd := cli.NewRootCmd(mnemos, resolveVersion())
@@ -130,4 +147,97 @@ func main() {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)
 	}
+}
+
+func isServerInvocation(args []string) bool {
+	return selectedCommand(args) == "serve"
+}
+
+func selectedCommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--config", "--project", "-p", "--log-level":
+			i++
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				return args[i]
+			}
+		}
+	}
+	return ""
+}
+
+func isCheckInvocation(args []string) bool {
+	return selectedCommand(args) == "check"
+}
+
+func runReadOnlyCheck(cfg *config.Config, logger *slog.Logger, buildVersion string) error {
+	db, err := sqlitestore.OpenReadOnly(cfg.DBPath())
+	if err != nil {
+		report := CheckReport{
+			Status:  CheckFail,
+			Summary: "Knowledge loop has a blocking failure.",
+			Signals: []CheckSignal{failedSignal("database", true, "global", err)},
+			ActionItems: []ActionItem{{
+				Severity: CheckFail,
+				Message:  "Initialize Mnemos or verify the configured data directory.",
+				Command:  "mnemos init",
+			}},
+		}
+		if hasArg(os.Args[1:], "--json") {
+			if renderErr := renderCheckJSON(os.Stdout, report); renderErr != nil {
+				return renderErr
+			}
+		} else {
+			renderCheckText(os.Stdout, report, hasArg(os.Args[1:], "--verbose"))
+		}
+		return checkFailedError{}
+	}
+	defer db.Close()
+
+	memStore := sqlitestore.NewSQLiteStore(db)
+	ftsSearcher := sqlitestore.NewFTSSearcher(db)
+	embedStore := sqlitestore.NewEmbeddingStore(db)
+	relStore := sqlitestore.NewRelationStore(db)
+	mirror := markdown.NewMirror("", false)
+	memManager := coremem.NewManager(
+		memStore, embedStore, nil, mirror,
+		cfg.Dedup.FuzzyThreshold, cfg.Dedup.SemanticThreshold,
+		logger, nil,
+	)
+	searchEngine := search.NewSearchEngine(ftsSearcher, embedStore, nil, relStore, logger, cfg.Hook.MMRLambda, cfg.Hook.FileBoost)
+	relManager := relation.NewManager(relStore, memStore, logger)
+	lifecycleEngine := lifecycle.NewEngine(
+		memStore,
+		cfg.Lifecycle.DecayInterval,
+		cfg.Lifecycle.GCRetentionDays,
+		cfg.Lifecycle.ArchiveThreshold,
+		false,
+		logger,
+	)
+	mnemos := core.NewMnemos(memManager, searchEngine, relManager, lifecycleEngine, memStore, logger)
+	defer mnemos.Shutdown()
+
+	root := &cobra.Command{Use: "mnemos", SilenceUsage: true, SilenceErrors: true}
+	root.AddCommand(newCheckCmd(cfg, mnemos, buildVersion))
+	root.SetArgs(checkCommandArgs(os.Args[1:]))
+	return root.Execute()
+}
+
+func checkCommandArgs(args []string) []string {
+	for i, arg := range args {
+		if arg == "check" {
+			return args[i:]
+		}
+	}
+	return args
+}
+
+func hasArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }

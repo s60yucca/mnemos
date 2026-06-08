@@ -172,12 +172,12 @@ func (d *AutopilotDaemon) weakenPreviousAutoCompiles(ctx context.Context, projec
 
 func (d *AutopilotDaemon) observeCompile(projectID string, result autoCompileResult, outcome string) {
 	observe.Feature("compile", map[string]any{
-		"project":   projectID,
-		"topic":     result.Topic,
-		"sources":   result.SourceCount,
-		"output_id": result.ArticleID,
-		"outcome":   outcome,
-		"mode":      "autopilot",
+		"project_id": projectID,
+		"topic":      result.Topic,
+		"sources":    result.SourceCount,
+		"output_id":  result.ArticleID,
+		"outcome":    outcome,
+		"mode":       "autopilot",
 	})
 }
 

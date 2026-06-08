@@ -8,6 +8,7 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
 // ReportWriter formats findings and stores them as autopilot report memories.
@@ -23,7 +24,7 @@ func NewReportWriter(mnemos *core.Mnemos) *ReportWriter {
 // Write formats findings into a report memory and stores it, bypassing the quality gate.
 func (w *ReportWriter) Write(ctx context.Context, projectID string, findings []Finding) error {
 	content := Format(findings, time.Now().UTC())
-	_, err := w.mnemos.StoreWithoutGate(ctx, &domain.StoreRequest{
+	res, err := w.mnemos.StoreWithoutGate(ctx, &domain.StoreRequest{
 		Content:   content,
 		Type:      domain.MemoryTypeSemantic,
 		Category:  "autopilot",
@@ -31,7 +32,49 @@ func (w *ReportWriter) Write(ctx context.Context, projectID string, findings []F
 		Source:    "autopilot-daemon",
 		ProjectID: projectID,
 	})
+	if err != nil {
+		return err
+	}
+	return w.archiveOlderReports(ctx, projectID, res.Memory.ID)
+}
+
+func (w *ReportWriter) archiveOlderReports(ctx context.Context, projectID, keepID string) error {
+	reports, err := w.mnemos.List(ctx, storage.ListQuery{
+		ProjectID: projectID,
+		Statuses:  []domain.MemoryStatus{domain.MemoryStatusActive},
+		Limit:     1000,
+		SortBy:    "created_at",
+		SortDesc:  true,
+	})
+	if err != nil {
+		return err
+	}
+
+	archived := domain.MemoryStatusArchived
+	for _, report := range reports {
+		if report.ID == keepID || report.Category != "autopilot" || report.Source != "autopilot-daemon" {
+			continue
+		}
+		if !hasTag(report.Tags, "autopilot-report") {
+			continue
+		}
+		if _, err := w.mnemos.Update(ctx, &domain.UpdateRequest{
+			ID:     report.ID,
+			Status: &archived,
+		}); err != nil {
+			return err
+		}
+	}
 	return err
+}
+
+func hasTag(tags []string, want string) bool {
+	for _, tag := range tags {
+		if tag == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Format renders findings as structured markdown (≤2000 characters).

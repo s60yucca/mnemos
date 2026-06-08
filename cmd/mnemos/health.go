@@ -26,6 +26,7 @@ const (
 	StatusFiring Status = iota
 	StatusLow
 	StatusNotFiring
+	StatusUnknown
 )
 
 func (s Status) String() string {
@@ -36,6 +37,8 @@ func (s Status) String() string {
 		return "LOW ACTIVITY"
 	case StatusNotFiring:
 		return "NOT OBSERVED"
+	case StatusUnknown:
+		return "UNKNOWN"
 	default:
 		return "UNKNOWN"
 	}
@@ -96,9 +99,13 @@ func parseLog(logPath string, since time.Time, projectFilter string) ([]Event, e
 			}
 		}
 
-		// Filter by project if specified
+		// Filter by project if specified. project_id is canonical; project is legacy.
 		if projectFilter != "" {
-			if proj, ok := attrs["project"]; !ok || proj != projectFilter {
+			proj := attrs["project_id"]
+			if proj == "" {
+				proj = attrs["project"]
+			}
+			if proj != projectFilter {
 				continue
 			}
 		}
@@ -120,6 +127,14 @@ func parseLog(logPath string, since time.Time, projectFilter string) ([]Event, e
 // classifyFeature determines the health status of a feature based on events and baseline
 // allEvents should contain ALL events (including MCP calls), featureEvents should contain only the feature's events
 func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.Baseline, activeDays []time.Time) Status {
+	featureName := ""
+	if len(featureEvents) > 0 {
+		featureName = featureEvents[0].Feature
+	}
+	return classifyFeatureNamed(featureName, featureEvents, allEvents, baseline, activeDays)
+}
+
+func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents []Event, baseline observe.Baseline, activeDays []time.Time) Status {
 	if len(featureEvents) == 0 {
 		return StatusNotFiring
 	}
@@ -136,10 +151,10 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 		eventsByDay[day]++
 	}
 
-	// Count MCP calls per day (for ratio-based features)
+	// Count eligible denominator events per day for ratio-based features.
 	mcpCallsByDay := make(map[string]int)
 	for _, event := range allEvents {
-		if event.Feature == "store_call" || event.Feature == "context_call" || event.Feature == "search_call" {
+		if isFeatureDenominator(featureName, event.Feature) {
 			day := event.Timestamp.Format("2006-01-02")
 			mcpCallsByDay[day]++
 		}
@@ -167,7 +182,7 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 		}
 
 		if daysWithData == 0 {
-			return StatusLow
+			return StatusUnknown
 		}
 
 		percentAbove := float64(daysAboveThreshold) / float64(daysWithData)
@@ -191,6 +206,19 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 		return StatusFiring
 	}
 	return StatusLow
+}
+
+func isFeatureDenominator(featureName, eventName string) bool {
+	switch featureName {
+	case "quality_gate", "dedup", "summarize", "file_link":
+		return eventName == "store_call"
+	case "mmr":
+		return eventName == "search_call" || eventName == "context_call"
+	case "auto_inject":
+		return eventName == "auto_inject_attempt"
+	default:
+		return eventName == "store_call" || eventName == "context_call" || eventName == "search_call"
+	}
 }
 
 // detectActiveDays identifies days with ≥ ActiveDayThreshold MCP calls
@@ -234,6 +262,7 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 	firing := []string{}
 	low := []string{}
 	notObserved := []string{}
+	unknown := []string{}
 
 	for feature, status := range classifications {
 		switch status {
@@ -243,7 +272,18 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 			low = append(low, feature)
 		case StatusNotFiring:
 			notObserved = append(notObserved, feature)
+		case StatusUnknown:
+			unknown = append(unknown, feature)
 		}
+	}
+
+	if len(unknown) > 0 {
+		output.WriteString("? UNKNOWN (" + fmt.Sprintf("%d", len(unknown)) + ")\n")
+		for _, feature := range unknown {
+			baseline := observe.Baselines[feature]
+			output.WriteString(fmt.Sprintf("  • %s: %s\n", feature, baseline.Expected))
+		}
+		output.WriteString("\n")
 	}
 
 	// Display FIRING NORMALLY
@@ -367,11 +407,7 @@ All times are interpreted as UTC; output is displayed in local timezone.
 The --days flag uses a rolling 24-hour window (N × 24 hours ending at current time), not calendar days.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Determine log path
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			logPath := filepath.Join(home, ".mnemos", "logs", "features.log")
+			logPath := filepath.Join(dataDir, "logs", "features.log")
 
 			// Check if log file exists
 			if _, err := os.Stat(logPath); os.IsNotExist(err) {
@@ -383,11 +419,11 @@ The --days flag uses a rolling 24-hour window (N × 24 hours ending at current t
 			var sinceTime time.Time
 			if since != "" {
 				// Parse --since flag as UTC midnight
-				sinceTime, err = time.Parse("2006-01-02", since)
-				if err != nil {
-					return fmt.Errorf("invalid --since format (expected YYYY-MM-DD): %w", err)
+				parsed, parseErr := time.Parse("2006-01-02", since)
+				if parseErr != nil {
+					return fmt.Errorf("invalid --since format (expected YYYY-MM-DD): %w", parseErr)
 				}
-				sinceTime = sinceTime.UTC()
+				sinceTime = parsed.UTC()
 			} else {
 				// Use --days flag (rolling window)
 				sinceTime = time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
@@ -424,7 +460,7 @@ The --days flag uses a rolling 24-hour window (N × 24 hours ending at current t
 					}
 				}
 
-				status := classifyFeature(featureEvents, events, baseline, activeDays)
+				status := classifyFeatureNamed(featureName, featureEvents, events, baseline, activeDays)
 				classifications[featureName] = status
 			}
 

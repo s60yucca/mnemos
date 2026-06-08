@@ -128,7 +128,7 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 
 	// Instrument MCP call for active day detection
 	observe.Feature("store_call", map[string]any{
-		"project": storeReq.ProjectID,
+		"project_id": storeReq.ProjectID,
 	})
 
 	// Instrument feature-specific events (Tasks 8-11)
@@ -143,24 +143,25 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 			action = "fix"
 		}
 		observe.Feature("quality_gate", map[string]any{
-			"score":   result.Memory.QualityScore,
-			"action":  action,
-			"project": storeReq.ProjectID,
+			"score":      result.Memory.QualityScore,
+			"action":     action,
+			"project_id": storeReq.ProjectID,
 		})
 	}
 
 	// Task 9: dedup - fires on every store (both hit and miss)
 	observe.Feature("dedup", map[string]any{
-		"hit":     !result.Created,
-		"project": storeReq.ProjectID,
+		"hit":        !result.Created,
+		"project_id": storeReq.ProjectID,
 	})
 
 	// Task 10: summarize - fires when auto-summarization occurs
 	if result.Memory != nil && result.Memory.Summary != "" && storeReq.Summary == "" {
 		observe.Feature("summarize", map[string]any{
-			"memory_id": result.Memory.ID,
-			"method":    "auto",
-			"length":    len(result.Memory.Summary),
+			"memory_id":  result.Memory.ID,
+			"method":     "auto",
+			"length":     len(result.Memory.Summary),
+			"project_id": storeReq.ProjectID,
 		})
 	}
 
@@ -169,8 +170,9 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		if relatedFiles, ok := result.Memory.Metadata["related_files"]; ok && relatedFiles != "" {
 			fileCount := strings.Count(relatedFiles, ",") + 1
 			observe.Feature("file_link", map[string]any{
-				"memory_id": result.Memory.ID,
-				"count":     fileCount,
+				"memory_id":  result.Memory.ID,
+				"count":      fileCount,
+				"project_id": storeReq.ProjectID,
 			})
 		}
 	}
@@ -224,15 +226,16 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 	// Instrument MCP call for active day detection
 	observe.Feature("search_call", map[string]any{
-		"project": projectID,
-		"mode":    mode,
+		"project_id": projectID,
+		"mode":       mode,
 	})
 
 	// Task 12: mmr - fires on every search call (diversity filter is always applied)
 	if len(results) > 0 {
 		observe.Feature("mmr", map[string]any{
-			"selected": len(results),
-			"lambda":   0.7, // default lambda from assembler
+			"selected":   len(results),
+			"lambda":     0.7, // default lambda from assembler
+			"project_id": projectID,
 		})
 	}
 
@@ -406,14 +409,15 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 
 	// Instrument MCP call for active day detection
 	observe.Feature("context_call", map[string]any{
-		"project": projectID,
+		"project_id": projectID,
 	})
 
 	// Task 12: mmr - fires on every context call (diversity filter is always applied)
 	if result != nil && len(result.Memories) > 0 {
 		observe.Feature("mmr", map[string]any{
-			"selected": len(result.Memories),
-			"lambda":   0.7, // default lambda from assembler
+			"selected":   len(result.Memories),
+			"lambda":     0.7, // default lambda from assembler
+			"project_id": projectID,
 		})
 	}
 
@@ -433,8 +437,8 @@ func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*
 
 	// Task 17: decay - fires on every maintenance operation
 	observe.Feature("decay", map[string]any{
-		"project": projectID,
-		"outcome": "ok",
+		"project_id": projectID,
+		"outcome":    "ok",
 	})
 
 	result := `{"status":"ok","message":"maintenance complete"}`
@@ -531,10 +535,12 @@ func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*m
 
 	// Task 16: compile - fires on every compile operation
 	observe.Feature("compile", map[string]any{
-		"topic":     topic,
-		"sources":   sourceCount,
-		"output_id": articleID,
-		"outcome":   "ok",
+		"topic":      topic,
+		"sources":    sourceCount,
+		"output_id":  articleID,
+		"outcome":    "ok",
+		"mode":       "manual",
+		"project_id": projectID,
 	})
 
 	out, _ := json.Marshal(outMap)

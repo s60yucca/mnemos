@@ -94,6 +94,7 @@ type UpdateRequest struct {
 	Summary  *string
 	Type     *MemoryType
 	Category *string
+	Status   *MemoryStatus
 	Tags     []string
 	Source   *string
 	Metadata map[string]string

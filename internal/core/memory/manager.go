@@ -230,6 +230,9 @@ func (m *Manager) Update(ctx context.Context, req *domain.UpdateRequest) (*domai
 	} else if contentChanged {
 		mem.Category = m.classifier.ClassifyCategory(mem.Content, mem.Tags)
 	}
+	if req.Status != nil {
+		mem.Status = *req.Status
+	}
 	// Re-extract related files for updated content; delete stale key if no paths found
 	if contentChanged {
 		if encoded := extractRelatedFiles(mem.Content); encoded != "" {

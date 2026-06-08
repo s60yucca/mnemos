@@ -58,6 +58,9 @@ func ValidateUpdateRequest(req *UpdateRequest) error {
 	if req.Type != nil && !req.Type.IsValid() {
 		errs.Add("type", "invalid memory type")
 	}
+	if req.Status != nil && !req.Status.IsValid() {
+		errs.Add("status", "invalid memory status")
+	}
 
 	if errs.HasErrors() {
 		return errs

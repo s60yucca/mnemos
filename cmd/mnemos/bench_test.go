@@ -131,7 +131,7 @@ func TestBenchExport_ValidSessions(t *testing.T) {
 	}
 
 	header := lines[0]
-	expectedHeader := "session_id,timestamp_start,timestamp_end,project_id,mode,duration_ms,tokens_in,tokens_out,mcp_calls_count,task_completed,task_category"
+	expectedHeader := "session_id,timestamp_start,timestamp_end,project_id,mode,duration_ms,tokens_in,tokens_out,mcp_calls_count,task_completed,task_category,provenance"
 	if header != expectedHeader {
 		t.Errorf("header mismatch:\nexpected: %s\ngot:      %s", expectedHeader, header)
 	}

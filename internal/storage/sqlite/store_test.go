@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -364,6 +366,36 @@ func TestOpen_ConnectionPragmasApplied(t *testing.T) {
 	} else {
 		t.Logf("mmap_size PRAGMA not supported by driver: %v", err)
 	}
+}
+
+func TestOpenReadOnly_DoesNotCreateOrMutate(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.db")
+	_, err := OpenReadOnly(missing)
+	require.Error(t, err)
+	_, statErr := os.Stat(missing)
+	require.True(t, os.IsNotExist(statErr))
+
+	path := filepath.Join(t.TempDir(), "existing.db")
+	writable, err := Open(path)
+	require.NoError(t, err)
+	_, err = writable.Exec(`PRAGMA user_version = 7`)
+	require.NoError(t, err)
+	require.NoError(t, writable.Close())
+
+	infoBefore, err := os.Stat(path)
+	require.NoError(t, err)
+	readOnly, err := OpenReadOnly(path)
+	require.NoError(t, err)
+	var version int
+	require.NoError(t, readOnly.QueryRow(`PRAGMA user_version`).Scan(&version))
+	assert.Equal(t, 7, version)
+	_, err = readOnly.Exec(`UPDATE memories SET status='archived'`)
+	require.Error(t, err)
+	require.NoError(t, readOnly.Close())
+
+	infoAfter, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, infoBefore.Size(), infoAfter.Size())
 }
 
 // TestOpen_ValidationCatchesMissingPragma verifies that validateConnectionPragmas

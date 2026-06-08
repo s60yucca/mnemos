@@ -292,6 +292,11 @@ mnemos delete <id>                                    # soft delete
 mnemos relate <src> <tgt> --type supersedes           # typed relation
 mnemos stats                                          # storage + quality stats
 mnemos maintain                                       # decay + stale + GC
+mnemos eval [--project myapp]                         # knowledge quality metrics
+mnemos health [--project myapp]                       # raw feature activity
+mnemos check [--project myapp]                        # verify the automatic knowledge loop
+mnemos check --launch                                 # apply public-launch readiness gates
+mnemos check --fix                                    # archive older generated reports safely
 mnemos serve                                          # MCP server (stdio)
 mnemos version
 
@@ -305,6 +310,11 @@ mnemos autopilot report [--project <id>]
 
 # Backfill
 mnemos backfill summaries --project <id> [--dry-run] [--limit N]
+
+# Benchmark readiness
+mnemos bench status
+mnemos bench mode on | off
+mnemos bench export [--project <id>] [--output sessions.csv]
 
 # Hook subcommands (called by clients, not manually)
 mnemos hook session-start
@@ -330,7 +340,7 @@ Mnemos does one thing: **give agents a knowledge base that compiles itself.**
 See [ROADMAP.md](ROADMAP.md). Short version:
 
 - **v1.1.x (shipped):** full auto-pipeline, MMR context assembly, file-aware retrieval, passive autopilot daemon, benchmark framework, Codex support
-- **v1.2 (next):** public value benchmark (dogfooding), npm wrapper, demo GIF, HN launch
+- **v1.2 (next):** `mnemos check` loop verification, provenance-backed launch readiness, HN launch
 - **v1.3 (planned):** team memory via git — shared `.mnemos/shared/` for teammate knowledge
 - **v2.0+ (TBD):** cross-project memory scopes, memory compaction, driven by user feedback
 

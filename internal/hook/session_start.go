@@ -73,6 +73,20 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	if quality == QueryUseless {
 		slog.Debug("session_start: query is useless, skipping context injection",
 			"query", query, "project_id", state.ProjectID)
+		autoInjectPayload, autoInjectTokens := runSessionStartAutoInject(ctx, d.mnemos, input, sessionID, nil)
+		if autoInjectPayload != "" {
+			return &HookOutput{
+				ContextInjection: autoInjectPayload,
+				Status:           "ok",
+				Message:          "session started with auto-injected project context",
+				Metadata: map[string]any{
+					"memories_found": 0,
+					"tokens_used":    autoInjectTokens,
+					"query_source":   "auto_inject_useless_fallback",
+				},
+				HookSpecificOutput: additionalContextOutput("SessionStart", autoInjectPayload),
+			}, nil
+		}
 		return &HookOutput{
 			Status:  "ok",
 			Message: "session started, awaiting task-specific prompt for context",
@@ -109,6 +123,20 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 		contextString, usedIDs = assembleRecentContext(ctx, d.mnemos, state.ProjectID, d.cfg.SessionStartMaxTokens)
 		existingIDs = usedIDs
 		if contextString == "" {
+			autoInjectPayload, autoInjectTokens := runSessionStartAutoInject(ctx, d.mnemos, input, sessionID, nil)
+			if autoInjectPayload != "" {
+				return &HookOutput{
+					ContextInjection: autoInjectPayload,
+					Status:           "ok",
+					Message:          "session started with auto-injected project context",
+					Metadata: map[string]any{
+						"memories_found": 0,
+						"tokens_used":    autoInjectTokens,
+						"query_source":   "auto_inject_broad_query",
+					},
+					HookSpecificOutput: additionalContextOutput("SessionStart", autoInjectPayload),
+				}, nil
+			}
 			return &HookOutput{
 				Status:  "ok",
 				Message: "session started, no recent context found",
@@ -124,30 +152,10 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	}
 
 	// 7. AUTO INJECT
-	var dataDir string
-	home, err := os.UserHomeDir()
-	if err == nil {
-		dataDir = filepath.Join(home, ".mnemos")
-	}
-
-	detector := NewProjectDetector(resolveProjectDir(input), dataDir)
-	detectedProjectID, _, _ := detector.Detect()
-
-	var autoInjectPayload string
-
-	if detectedProjectID != "" {
-		clientID := os.Getenv("MNEMOS_CLIENT")
-		injector := NewAutoInjector(d.mnemos, AutoInjectConfigFromEnv(), dataDir)
-
-		// To deduplicate, we need to extract IDs from the existing contextString
-		// Wait, existingIDs was populated earlier
-
-		autoInjectPayload, _, _ = injector.Run(ctx, sessionID, detectedProjectID, clientID, existingIDs)
-
-		if autoInjectPayload != "" {
-			contextString = autoInjectPayload + "\n\n" + contextString
-			tokensUsed += len(autoInjectPayload) / 4
-		}
+	autoInjectPayload, autoInjectTokens := runSessionStartAutoInject(ctx, d.mnemos, input, sessionID, existingIDs)
+	if autoInjectPayload != "" {
+		contextString = autoInjectPayload + "\n\n" + contextString
+		tokensUsed += autoInjectTokens
 	}
 
 	// 8. RETURN CONTEXT
@@ -160,6 +168,27 @@ func handleSessionStart(ctx context.Context, d *Dispatcher, input *HookInput) (*
 		},
 		HookSpecificOutput: additionalContextOutput("SessionStart", contextString),
 	}, nil
+}
+
+func runSessionStartAutoInject(ctx context.Context, mnemos *core.Mnemos, input *HookInput, sessionID string, existingIDs []string) (string, int) {
+	dataDir := os.Getenv("MNEMOS_DATA_DIR")
+	if dataDir == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			dataDir = filepath.Join(home, ".mnemos")
+		}
+	}
+
+	detector := NewProjectDetector(resolveProjectDir(input), dataDir)
+	detectedProjectID, _, _ := detector.Detect()
+	if detectedProjectID == "" {
+		return "", 0
+	}
+
+	clientID := os.Getenv("MNEMOS_CLIENT")
+	injector := NewAutoInjector(mnemos, AutoInjectConfigFromEnv(), dataDir)
+	payload, _, _ := injector.Run(ctx, sessionID, detectedProjectID, clientID, existingIDs)
+	return payload, len(payload) / 4
 }
 
 // formatContextResult formats a *search.ContextResult as markdown for the AI context window.

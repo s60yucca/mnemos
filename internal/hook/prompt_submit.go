@@ -112,8 +112,9 @@ func handlePromptSubmit(ctx context.Context, d *Dispatcher, input *HookInput) (*
 	// Task 18: topic_shift - fires when topic changes
 	if topicChanged {
 		observe.Feature("topic_shift", map[string]any{
-			"changed": true,
-			"topic":   newTopic,
+			"changed":    true,
+			"topic":      newTopic,
+			"project_id": state.ProjectID,
 		})
 	}
 

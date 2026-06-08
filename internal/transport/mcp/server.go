@@ -93,6 +93,9 @@ func mcpText(text string) *mcp.CallToolResult {
 
 // getDataDir returns the mnemos data directory
 func getDataDir() string {
+	if dataDir := os.Getenv("MNEMOS_DATA_DIR"); dataDir != "" {
+		return dataDir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", ".mnemos")

@@ -1,10 +1,14 @@
 package autopilot
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"testing/quick"
 	"time"
+
+	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
 // helpers to build test findings
@@ -74,6 +78,50 @@ func TestReportFormat_StaleOnly(t *testing.T) {
 	}
 	if !strings.Contains(result, "Consider recompiling") {
 		t.Error("suggestion should mention recompiling for stale finding")
+	}
+}
+
+func TestReportWriter_ArchivesOlderReports(t *testing.T) {
+	env := newStalenessTestEnv(t)
+	ctx := context.Background()
+	projectID := "report-archive"
+	writer := NewReportWriter(env.mnemos)
+
+	if err := writer.Write(ctx, projectID, []Finding{relationsFinding(1, "internal/a.go")}); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if err := writer.Write(ctx, projectID, []Finding{relationsFinding(2, "internal/b.go")}); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+
+	activeReports, err := env.mnemos.List(ctx, storage.ListQuery{
+		ProjectID: projectID,
+		Statuses:  []domain.MemoryStatus{domain.MemoryStatusActive},
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("list active reports: %v", err)
+	}
+	activeAutopilotReports := 0
+	for _, report := range activeReports {
+		if report.Category == "autopilot" && report.Source == "autopilot-daemon" {
+			activeAutopilotReports++
+		}
+	}
+	if activeAutopilotReports != 1 {
+		t.Fatalf("expected one active autopilot report, got %d", activeAutopilotReports)
+	}
+
+	archivedReports, err := env.mnemos.List(ctx, storage.ListQuery{
+		ProjectID: projectID,
+		Statuses:  []domain.MemoryStatus{domain.MemoryStatusArchived},
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("list archived reports: %v", err)
+	}
+	if len(archivedReports) != 1 {
+		t.Fatalf("expected one archived report, got %d", len(archivedReports))
 	}
 }
 
