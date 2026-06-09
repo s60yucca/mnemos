@@ -18,6 +18,7 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/config"
 	"github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/spf13/cobra"
@@ -389,49 +390,45 @@ func isAutoCompiled(memory *domain.Memory) bool {
 }
 
 func featureHealthSignal(events []Event) CheckSignal {
-	featureEvents := map[string]int{}
-	denominators := map[string]int{}
-	for _, event := range events {
-		featureEvents[event.Feature]++
-		switch event.Feature {
-		case "store_call":
-			denominators["store"]++
-		case "search_call", "context_call":
-			denominators["query"]++
-		}
-	}
-	required := []struct {
-		name  string
-		denom string
-		ratio float64
-	}{
-		{"quality_gate", "store", 0.95},
-		{"dedup", "store", 0.95},
-		{"mmr", "query", 0.95},
-	}
-	var firing, low, unknown int
-	for _, item := range required {
-		denom := denominators[item.denom]
-		if denom == 0 {
-			unknown++
+	activeDays := detectActiveDays(events)
+	criticalFeatures := map[string]bool{"quality_gate": true, "dedup": true, "mmr": true}
+	var firing, low, unknown, noncriticalLow int
+	for name, baseline := range observe.Baselines {
+		if name == "autopilot" || name == "compile" || name == "auto_inject" {
 			continue
 		}
-		if float64(featureEvents[item.name])/float64(denom) >= item.ratio {
+		var matching []Event
+		for _, event := range events {
+			if event.Feature == name {
+				matching = append(matching, event)
+			}
+		}
+		classification := classifyFeatureNamed(name, matching, events, baseline, activeDays)
+		switch classification {
+		case StatusFiring:
 			firing++
-		} else {
-			low++
+		case StatusUnknown:
+			unknown++
+		case StatusLow, StatusNotFiring:
+			if criticalFeatures[name] {
+				low++
+			} else {
+				noncriticalLow++
+			}
 		}
 	}
 	status := CheckPass
 	if low > 0 {
 		status = CheckFail
+	} else if noncriticalLow > 0 {
+		status = CheckWarn
 	} else if unknown > 0 {
 		status = CheckUnknown
 	}
 	return CheckSignal{
 		Name: "feature health", Status: status, Critical: true, Scope: "telemetry",
-		Value:       fmt.Sprintf("%d firing, %d low, %d unknown", firing, low, unknown),
-		Explanation: "Critical per-call features use store or query-specific denominators.",
+		Value:       fmt.Sprintf("%d firing, %d critical low, %d noncritical low, %d unknown", firing, low, noncriticalLow, unknown),
+		Explanation: "Feature baselines use operation-specific denominators; conditional features are warnings.",
 	}
 }
 

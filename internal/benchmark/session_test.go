@@ -18,9 +18,18 @@ func TestNewSessionTracker(t *testing.T) {
 	assert.NotNil(t, tracker)
 	assert.NotNil(t, tracker.tokenCounter)
 	assert.Equal(t, BenchModeOn, tracker.benchMode)
+	assert.Equal(t, "production", tracker.provenance)
 
 	// Cleanup
 	tracker.Stop()
+}
+
+func TestNewSessionTrackerWithTimeoutUsesTestProvenance(t *testing.T) {
+	tracker, err := NewSessionTrackerWithTimeout(t.TempDir(), time.Second)
+	require.NoError(t, err)
+	defer tracker.Stop()
+
+	assert.Equal(t, "test", tracker.provenance)
 }
 
 func TestSessionStartEnd(t *testing.T) {
@@ -86,6 +95,42 @@ func TestTokenAccumulation(t *testing.T) {
 	assert.Equal(t, 3, session.MCPCallsCount)
 	assert.Greater(t, session.TokensIn, 0)
 	assert.Greater(t, session.TokensOut, 0)
+}
+
+func TestOnMCPCall_ProjectChangeStartsNewSession(t *testing.T) {
+	tracker, err := NewSessionTracker(t.TempDir())
+	require.NoError(t, err)
+	defer tracker.Stop()
+
+	tracker.OnMCPCall("project-a", "first request", "first response")
+	first := tracker.GetCurrentSession()
+	require.NotNil(t, first)
+
+	tracker.OnMCPCall("project-b", "second request", "second response")
+	second := tracker.GetCurrentSession()
+	require.NotNil(t, second)
+
+	assert.NotEqual(t, first.ID, second.ID)
+	assert.Equal(t, "project-b", second.ProjectID)
+	assert.Equal(t, 1, second.MCPCallsCount)
+}
+
+func TestOnMCPCall_ModeChangeMarksSessionMixed(t *testing.T) {
+	tempDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "bench_mode"), []byte("on"), 0o644))
+
+	tracker, err := NewSessionTracker(tempDir)
+	require.NoError(t, err)
+	defer tracker.Stop()
+
+	tracker.OnMCPCall("test-project", "first request", "first response")
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "bench_mode"), []byte("off"), 0o644))
+	tracker.OnMCPCall("test-project", "second request", "second response")
+
+	session := tracker.GetCurrentSession()
+	require.NotNil(t, session)
+	assert.Equal(t, BenchModeMixed, session.Mode)
+	assert.Equal(t, 2, session.MCPCallsCount)
 }
 
 func TestSessionEndWithoutCompletion(t *testing.T) {

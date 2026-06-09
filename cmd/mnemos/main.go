@@ -41,7 +41,7 @@ func resolveVersion() string {
 
 func main() {
 	// Load config
-	cfgFile := os.Getenv("MNEMOS_CONFIG")
+	cfgFile := configPathFromArgs(os.Args[1:])
 	cfg, err := config.LoadConfig(cfgFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config error:", err)
@@ -141,12 +141,25 @@ func main() {
 	rootCmd.AddCommand(newAutopilotCmd(daemon, mnemos, cfg.DataDir))
 	rootCmd.AddCommand(newBackfillCmd(mnemos))
 	rootCmd.AddCommand(newHealthCmd(cfg.DataDir))
+	rootCmd.AddCommand(newStatusCmd(cfg))
 	rootCmd.AddCommand(newBenchCmd(cfg.DataDir))
 	rootCmd.AddCommand(newEvalCmd(mnemos))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)
 	}
+}
+
+func configPathFromArgs(args []string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--config" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if strings.HasPrefix(args[i], "--config=") {
+			return strings.TrimPrefix(args[i], "--config=")
+		}
+	}
+	return os.Getenv("MNEMOS_CONFIG")
 }
 
 func isServerInvocation(args []string) bool {

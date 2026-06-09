@@ -197,6 +197,13 @@ func TestIntegration_AutoInject(t *testing.T) {
 	assert.NotContains(t, autoInjectSection, mem2.Memory.ID, "mem2 should NOT be auto-injected (deduplicated)")
 
 	assert.Contains(t, mainContextSection, "specific implementation details", "mem2 should be in main context")
+
+	// Repeated session-start events may still retrieve prompt context, but the
+	// passive project payload must only be injected once per session.
+	secondOut := dispatchRaw(t, d, startInput)
+	assert.NotEqual(t, "error", secondOut.Status, "repeated session-start should not error: %s", secondOut.Message)
+	assert.NotContains(t, secondOut.ContextInjection, "# Mnemos Project Context")
+	assert.Contains(t, secondOut.ContextInjection, "specific implementation details")
 }
 
 // --- helpers ---

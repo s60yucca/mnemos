@@ -215,15 +215,15 @@ func (m *Manager) Update(ctx context.Context, req *domain.UpdateRequest) (*domai
 		mem.ContentHash = util.ContentHash(*req.Content, mem.ProjectID)
 		contentChanged = true
 	}
-	if req.Summary != nil {
-		mem.Summary = *req.Summary
-	} else if contentChanged {
-		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
-	}
 	if req.Type != nil {
 		mem.Type = *req.Type
 	} else if contentChanged {
 		mem.Type = m.classifier.ClassifyType(mem.Content, mem.Tags)
+	}
+	if req.Summary != nil {
+		mem.Summary = *req.Summary
+	} else if contentChanged {
+		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
 	}
 	if req.Category != nil {
 		mem.Category = *req.Category
@@ -474,7 +474,7 @@ func (m *Manager) applyQualityFixes(req *domain.StoreRequest, verdict QualityVer
 			reason = verdict.Issues[0].Reason
 		}
 		m.logger.Info("quality gate reject",
-			"project", req.ProjectID,
+			"project_id", req.ProjectID,
 			"reason", reason,
 			"score", verdict.Score,
 			"preview", truncateStr(req.Content, 80),
@@ -494,7 +494,7 @@ func (m *Manager) applyQualityFixes(req *domain.StoreRequest, verdict QualityVer
 			}
 		}
 		m.logger.Info("quality gate merge",
-			"project", req.ProjectID,
+			"project_id", req.ProjectID,
 			"existing_id", existingID,
 			"score", verdict.Score,
 		)

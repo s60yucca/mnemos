@@ -35,7 +35,7 @@ var Baselines = map[string]Baseline{
 	"mmr": {
 		MinDaily:        0,
 		RatioVsMCPCalls: 0.95,
-		Expected:        "Every context/search call (95%+ of queries)",
+		Expected:        "Every context assembly (95%+ of context calls)",
 	},
 	"autopilot": {
 		MinDaily:        24,

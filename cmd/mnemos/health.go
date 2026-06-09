@@ -136,6 +136,14 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 
 func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents []Event, baseline observe.Baseline, activeDays []time.Time) Status {
 	if len(featureEvents) == 0 {
+		if baseline.RatioVsMCPCalls > 0 {
+			for _, event := range allEvents {
+				if isFeatureDenominator(featureName, event.Feature) {
+					return StatusNotFiring
+				}
+			}
+			return StatusUnknown
+		}
 		return StatusNotFiring
 	}
 
@@ -213,7 +221,7 @@ func isFeatureDenominator(featureName, eventName string) bool {
 	case "quality_gate", "dedup", "summarize", "file_link":
 		return eventName == "store_call"
 	case "mmr":
-		return eventName == "search_call" || eventName == "context_call"
+		return eventName == "context_call"
 	case "auto_inject":
 		return eventName == "auto_inject_attempt"
 	default:
@@ -455,7 +463,8 @@ The --days flag uses a rolling 24-hour window (N × 24 hours ending at current t
 				// Filter events for this feature
 				var featureEvents []Event
 				for _, e := range events {
-					if e.Feature == featureName {
+					if e.Feature == featureName &&
+						(featureName != "auto_inject" || (e.Attrs["outcome"] == "ok" && e.Attrs["payload"] == "true")) {
 						featureEvents = append(featureEvents, e)
 					}
 				}

@@ -229,6 +229,28 @@ func TestE2E_AssembleContext(t *testing.T) {
 	assert.Greater(t, ctxResult.TotalTokens, 0)
 }
 
+func TestE2E_AssembleContextPreservesDurableRelevance(t *testing.T) {
+	m := newTestMnemos(t)
+	ctx := context.Background()
+
+	stored, err := m.Store(ctx, &domain.StoreRequest{
+		Content:   "JWT authentication middleware uses rotating signing keys",
+		Type:      domain.MemoryTypeSemantic,
+		ProjectID: "relevance-test",
+	})
+	require.NoError(t, err)
+
+	original := stored.Memory.RelevanceScore
+	result, err := m.AssembleContext(ctx, "JWT authentication", "relevance-test", 1000, false, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Memories)
+
+	reloaded, err := m.Get(ctx, stored.Memory.ID)
+	require.NoError(t, err)
+	assert.Equal(t, original, reloaded.RelevanceScore)
+	assert.Equal(t, 2, reloaded.AccessCount)
+}
+
 // E2E Test 8: List with filters
 func TestE2E_ListWithFilters(t *testing.T) {
 	m := newTestMnemos(t)

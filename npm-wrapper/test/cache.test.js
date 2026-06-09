@@ -57,13 +57,20 @@ describe('Cache Management', () => {
 
   describe('isCached', () => {
     let mockExistsSync;
+    let mockStatSync;
 
     beforeEach(() => {
       mockExistsSync = jest.spyOn(fs, 'existsSync');
+      mockStatSync = jest.spyOn(fs, 'statSync').mockReturnValue({
+        isFile: () => true,
+        size: 1024,
+        mode: 0o755,
+      });
     });
 
     afterEach(() => {
       mockExistsSync.mockRestore();
+      mockStatSync.mockRestore();
     });
 
     test('returns true when binary exists', () => {
@@ -83,6 +90,20 @@ describe('Cache Management', () => {
       const result = isCached(testVersion, testBinaryName);
 
       expect(result).toBe(false);
+    });
+
+    test('returns false for an empty cached binary', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isFile: () => true, size: 0, mode: 0o755 });
+
+      expect(isCached(testVersion, testBinaryName)).toBe(false);
+    });
+
+    test('returns false for a non-executable Unix binary', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockStatSync.mockReturnValue({ isFile: () => true, size: 1024, mode: 0o644 });
+
+      expect(isCached(testVersion, testBinaryName)).toBe(process.platform === 'win32');
     });
 
     test('returns false when fs.existsSync throws error', () => {
@@ -128,17 +149,24 @@ describe('Cache Management', () => {
   describe('ensureCached', () => {
     let mockMkdirSync;
     let mockExistsSync;
+    let mockStatSync;
     let mockDownloadFn;
 
     beforeEach(() => {
       mockMkdirSync = jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {});
       mockExistsSync = jest.spyOn(fs, 'existsSync');
+      mockStatSync = jest.spyOn(fs, 'statSync').mockReturnValue({
+        isFile: () => true,
+        size: 1024,
+        mode: 0o755,
+      });
       mockDownloadFn = jest.fn().mockResolvedValue();
     });
 
     afterEach(() => {
       mockMkdirSync.mockRestore();
       mockExistsSync.mockRestore();
+      mockStatSync.mockRestore();
     });
 
     test('returns cached binary path without downloading if already cached', async () => {
@@ -300,13 +328,20 @@ describe('Cache Management', () => {
 
   describe('Version-based Cache Invalidation', () => {
     let mockExistsSync;
+    let mockStatSync;
 
     beforeEach(() => {
       mockExistsSync = jest.spyOn(fs, 'existsSync');
+      mockStatSync = jest.spyOn(fs, 'statSync').mockReturnValue({
+        isFile: () => true,
+        size: 1024,
+        mode: 0o755,
+      });
     });
 
     afterEach(() => {
       mockExistsSync.mockRestore();
+      mockStatSync.mockRestore();
     });
 
     test('different versions use different cache paths', () => {
@@ -351,6 +386,11 @@ describe('Cache Management', () => {
 
     test('ensureCached constructs valid binary path', async () => {
       const mockExistsSync = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const mockStatSync = jest.spyOn(fs, 'statSync').mockReturnValue({
+        isFile: () => true,
+        size: 1024,
+        mode: 0o755,
+      });
 
       const platformInfo = {
         os: 'linux',
@@ -365,6 +405,7 @@ describe('Cache Management', () => {
       expect(result).toBe(normalized);
 
       mockExistsSync.mockRestore();
+      mockStatSync.mockRestore();
     });
   });
 });

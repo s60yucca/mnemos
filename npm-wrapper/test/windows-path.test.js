@@ -12,13 +12,20 @@ const { detectPlatform } = require('../lib/platform');
 describe('Windows Path Handling', () => {
   let originalPlatform;
   let originalArch;
+  let mockStatSync;
 
   beforeEach(() => {
     originalPlatform = process.platform;
     originalArch = process.arch;
+    mockStatSync = jest.spyOn(fs, 'statSync').mockReturnValue({
+      isFile: () => true,
+      size: 1024,
+      mode: 0o755,
+    });
   });
 
   afterEach(() => {
+    mockStatSync.mockRestore();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
       writable: true,

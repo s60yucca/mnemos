@@ -16,7 +16,7 @@ import (
 // Parameters:
 //   - filePath: Path to the config.toml file (typically ~/.codex/config.toml)
 //   - binPath: Absolute path to the mnemos binary
-//   - projectID: Project identifier for MNEMOS_PROJECT env var
+//   - projectID: Project identifier for MNEMOS_PROJECT_ID env var
 //   - force: If true, replaces entire mnemos entry; if false, updates only command/args
 //
 // Returns (changed bool, error). changed is true if the file was modified.
@@ -45,7 +45,7 @@ func MergeCodexTOML(filePath string, binPath string, projectID string, force boo
 
 	// If entry exists and not forcing, check if it already matches
 	if mnemosExists && !force {
-		if entryMatches(content, binPath) {
+		if entryMatches(content, binPath, projectID) {
 			// No changes needed
 			return false, nil
 		}
@@ -134,7 +134,7 @@ func appendMnemosEntry(content string, binPath string, projectID string) string 
 	result.WriteString("[mcp_servers.mnemos]\n")
 	result.WriteString(fmt.Sprintf("command = %q\n", binPath))
 	result.WriteString("args = [\"serve\"]\n")
-	result.WriteString(fmt.Sprintf("env = { \"MNEMOS_PROJECT\" = %q }\n", projectID))
+	result.WriteString(fmt.Sprintf("env = { \"MNEMOS_PROJECT_ID\" = %q }\n", projectID))
 
 	return result.String()
 }
@@ -173,7 +173,7 @@ func updateMnemosEntry(content string, binPath string, projectID string, force b
 		result.WriteString("[mcp_servers.mnemos]\n")
 		result.WriteString(fmt.Sprintf("command = %q\n", binPath))
 		result.WriteString("args = [\"serve\"]\n")
-		result.WriteString(fmt.Sprintf("env = { \"MNEMOS_PROJECT\" = %q }\n", projectID))
+		result.WriteString(fmt.Sprintf("env = { \"MNEMOS_PROJECT_ID\" = %q }\n", projectID))
 		// Keep everything after the section
 		for i := endIdx; i < len(lines); i++ {
 			result.WriteString(lines[i])
@@ -186,7 +186,7 @@ func updateMnemosEntry(content string, binPath string, projectID string, force b
 
 	// Partial update: preserve env and other fields
 	sectionLines := lines[startIdx+1 : endIdx]
-	updatedSection := updateFields(sectionLines, binPath)
+	updatedSection := updateFields(sectionLines, binPath, projectID)
 
 	var result strings.Builder
 	// Keep everything before the section
@@ -225,12 +225,15 @@ func findSectionEnd(lines []string, startIdx int) int {
 }
 
 // updateFields updates command and args fields in a section, preserving other fields.
-func updateFields(sectionLines []string, binPath string) []string {
+func updateFields(sectionLines []string, binPath string, projectID string) []string {
 	commandPattern := regexp.MustCompile(`^\s*command\s*=`)
 	argsPattern := regexp.MustCompile(`^\s*args\s*=`)
+	envPattern := regexp.MustCompile(`^\s*env\s*=`)
+	projectPattern := regexp.MustCompile(`"MNEMOS_PROJECT(?:_ID)?"\s*=\s*"[^"]*"`)
 
 	commandFound := false
 	argsFound := false
+	envFound := false
 	result := make([]string, 0, len(sectionLines))
 
 	for _, line := range sectionLines {
@@ -244,6 +247,18 @@ func updateFields(sectionLines []string, binPath string) []string {
 			indent := getIndentation(line)
 			result = append(result, fmt.Sprintf("%sargs = [\"serve\"]", indent))
 			argsFound = true
+		} else if envPattern.MatchString(line) {
+			indent := getIndentation(line)
+			replacement := fmt.Sprintf(`"MNEMOS_PROJECT_ID" = %q`, projectID)
+			if projectPattern.MatchString(line) {
+				line = projectPattern.ReplaceAllString(line, replacement)
+			} else if brace := strings.Index(line, "{"); brace >= 0 {
+				line = line[:brace+1] + " " + replacement + "," + line[brace+1:]
+			} else {
+				line = fmt.Sprintf("%senv = { %s }", indent, replacement)
+			}
+			result = append(result, line)
+			envFound = true
 		} else {
 			// Keep other fields unchanged
 			result = append(result, line)
@@ -256,6 +271,9 @@ func updateFields(sectionLines []string, binPath string) []string {
 	}
 	if !argsFound {
 		result = append(result, "args = [\"serve\"]")
+	}
+	if !envFound {
+		result = append(result, fmt.Sprintf(`env = { "MNEMOS_PROJECT_ID" = %q }`, projectID))
 	}
 
 	return result
@@ -272,7 +290,7 @@ func getIndentation(line string) string {
 }
 
 // entryMatches checks if the existing mnemos entry already has the correct command and args.
-func entryMatches(content string, binPath string) bool {
+func entryMatches(content string, binPath string, projectID string) bool {
 	lines := strings.Split(content, "\n")
 
 	// Find [mcp_servers.mnemos] section
@@ -296,9 +314,11 @@ func entryMatches(content string, binPath string) bool {
 	// Check if command and args match
 	hasCorrectCommand := false
 	hasCorrectArgs := false
+	hasCorrectProject := false
 
 	commandPattern := regexp.MustCompile(`^\s*command\s*=\s*"` + regexp.QuoteMeta(binPath) + `"`)
 	argsPattern := regexp.MustCompile(`^\s*args\s*=\s*\["serve"\]`)
+	projectPattern := regexp.MustCompile(`"MNEMOS_PROJECT_ID"\s*=\s*"` + regexp.QuoteMeta(projectID) + `"`)
 
 	for _, line := range sectionLines {
 		if commandPattern.MatchString(line) {
@@ -307,7 +327,10 @@ func entryMatches(content string, binPath string) bool {
 		if argsPattern.MatchString(line) {
 			hasCorrectArgs = true
 		}
+		if projectPattern.MatchString(line) {
+			hasCorrectProject = true
+		}
 	}
 
-	return hasCorrectCommand && hasCorrectArgs
+	return hasCorrectCommand && hasCorrectArgs && hasCorrectProject
 }

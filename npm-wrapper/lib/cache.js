@@ -29,7 +29,14 @@ function isCached(version, binaryName) {
   const binaryPath = path.join(cachePath, binaryName);
   
   try {
-    return fs.existsSync(binaryPath);
+    if (!fs.existsSync(binaryPath)) {
+      return false;
+    }
+    const stat = fs.statSync(binaryPath);
+    if (!stat.isFile() || stat.size === 0) {
+      return false;
+    }
+    return process.platform === 'win32' || (stat.mode & 0o111) !== 0;
   } catch (err) {
     return false;
   }

@@ -134,24 +134,27 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 	// Instrument feature-specific events (Tasks 8-11)
 	// These features fire during Store() but we log them here (MCP-only instrumentation per Design Decision 1)
 
-	// Task 8: quality_gate - fires on every store
+	// Task 8: quality_gate - fires on every store, including rejected stores.
+	action := "reject"
+	score := 0.0
 	if result.Memory != nil {
-		action := "accept"
+		score = result.Memory.QualityScore
+		action = "accept"
 		if !result.Created {
 			action = "merge"
 		} else if result.QualityNote != "" {
 			action = "fix"
 		}
-		observe.Feature("quality_gate", map[string]any{
-			"score":      result.Memory.QualityScore,
-			"action":     action,
-			"project_id": storeReq.ProjectID,
-		})
 	}
+	observe.Feature("quality_gate", map[string]any{
+		"score":      score,
+		"action":     action,
+		"project_id": storeReq.ProjectID,
+	})
 
 	// Task 9: dedup - fires on every store (both hit and miss)
 	observe.Feature("dedup", map[string]any{
-		"hit":        !result.Created,
+		"hit":        result.Memory != nil && !result.Created,
 		"project_id": storeReq.ProjectID,
 	})
 
@@ -168,12 +171,14 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 	// Task 11: file_link - fires when file paths are detected
 	if result.Memory != nil && result.Memory.Metadata != nil {
 		if relatedFiles, ok := result.Memory.Metadata["related_files"]; ok && relatedFiles != "" {
-			fileCount := strings.Count(relatedFiles, ",") + 1
-			observe.Feature("file_link", map[string]any{
-				"memory_id":  result.Memory.ID,
-				"count":      fileCount,
-				"project_id": storeReq.ProjectID,
-			})
+			var files []string
+			if err := json.Unmarshal([]byte(relatedFiles), &files); err == nil && len(files) > 0 {
+				observe.Feature("file_link", map[string]any{
+					"memory_id":  result.Memory.ID,
+					"count":      len(files),
+					"project_id": storeReq.ProjectID,
+				})
+			}
 		}
 	}
 
@@ -229,15 +234,6 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 		"project_id": projectID,
 		"mode":       mode,
 	})
-
-	// Task 12: mmr - fires on every search call (diversity filter is always applied)
-	if len(results) > 0 {
-		observe.Feature("mmr", map[string]any{
-			"selected":   len(results),
-			"lambda":     0.7, // default lambda from assembler
-			"project_id": projectID,
-		})
-	}
 
 	for _, res := range results {
 		if res.Memory != nil {

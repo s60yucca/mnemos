@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
@@ -33,6 +34,9 @@ func (f *FTSSearcher) Search(ctx context.Context, q storage.TextSearchQuery) ([]
 
 	// Sanitize query for FTS5 — strip special chars that cause syntax errors
 	ftsQuery := sanitizeFTSQuery(q.Query)
+	if len(strings.Fields(q.Query)) > maxQueryTokens {
+		slog.Warn("FTS query truncated", "tokens", len(strings.Fields(q.Query)), "max_tokens", maxQueryTokens)
+	}
 
 	var joinConditions []string
 	var extraArgs []any

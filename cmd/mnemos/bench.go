@@ -97,12 +97,7 @@ duration_ms, tokens_in, tokens_out, mcp_calls_count, task_completed, task_catego
 
 Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Determine log path
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			logPath := filepath.Join(home, ".mnemos", "logs", "features.log")
+			logPath := benchmarkLogPath(dataDir)
 
 			// Check if log file exists
 			if _, err := os.Stat(logPath); os.IsNotExist(err) {
@@ -113,11 +108,11 @@ Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 			// Parse time filter
 			var sinceTime time.Time
 			if since != "" {
-				sinceTime, err = time.Parse("2006-01-02", since)
+				parsed, err := time.Parse("2006-01-02", since)
 				if err != nil {
 					return fmt.Errorf("invalid --since format (expected YYYY-MM-DD): %w", err)
 				}
-				sinceTime = sinceTime.UTC()
+				sinceTime = parsed.UTC()
 			}
 
 			// Parse log and extract sessions
@@ -146,7 +141,7 @@ Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 			writer.Write([]string{
 				"session_id", "timestamp_start", "timestamp_end", "project_id", "mode",
 				"duration_ms", "tokens_in", "tokens_out", "mcp_calls_count",
-				"task_completed", "task_category", "provenance",
+				"task_completed", "task_category", "provenance", "auto_inject_fired",
 			})
 
 			// Write rows
@@ -164,6 +159,7 @@ Mixed-mode sessions (mode changed mid-session) are excluded by default.`,
 					fmt.Sprintf("%t", session.TaskCompleted),
 					session.TaskCategory,
 					session.Provenance,
+					fmt.Sprintf("%t", session.AutoInjectFired),
 				})
 			}
 
@@ -204,12 +200,7 @@ func newBenchStatusCmd(dataDir string) *cobra.Command {
 
 			fmt.Printf("Current benchmark mode: %s\n\n", strings.ToUpper(string(mode)))
 
-			// Get log path
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get home directory: %w", err)
-			}
-			logPath := filepath.Join(home, ".mnemos", "logs", "features.log")
+			logPath := benchmarkLogPath(dataDir)
 
 			// Check if log file exists
 			if _, err := os.Stat(logPath); os.IsNotExist(err) {
@@ -321,18 +312,23 @@ The 10-minute inactivity timeout will auto-close if you forget.`,
 
 // SessionRecord represents a parsed session from the log
 type SessionRecord struct {
-	SessionID      string
-	TimestampStart string
-	TimestampEnd   string
-	ProjectID      string
-	Mode           string
-	DurationMS     int64
-	TokensIn       int
-	TokensOut      int
-	MCPCallsCount  int
-	TaskCompleted  bool
-	TaskCategory   string
-	Provenance     string
+	SessionID       string
+	TimestampStart  string
+	TimestampEnd    string
+	ProjectID       string
+	Mode            string
+	DurationMS      int64
+	TokensIn        int
+	TokensOut       int
+	MCPCallsCount   int
+	TaskCompleted   bool
+	TaskCategory    string
+	Provenance      string
+	AutoInjectFired bool
+}
+
+func benchmarkLogPath(dataDir string) string {
+	return filepath.Join(dataDir, "logs", "features.log")
 }
 
 // extractSessions parses features.log and extracts session records
@@ -345,6 +341,7 @@ func extractSessions(logPath string, since time.Time, projectFilter string, mode
 
 	// Parse events
 	sessionStarts := make(map[string]map[string]string) // session_id -> attrs
+	autoInjectByProject := make(map[string][]time.Time)
 	var sessions []SessionRecord
 
 	scanner := bufio.NewScanner(f)
@@ -362,10 +359,6 @@ func extractSessions(logPath string, since time.Time, projectFilter string, mode
 
 		timestamp, err := time.Parse(time.RFC3339, parts[0])
 		if err != nil {
-			continue
-		}
-
-		if !since.IsZero() && timestamp.Before(since) {
 			continue
 		}
 
@@ -390,6 +383,10 @@ func extractSessions(logPath string, since time.Time, projectFilter string, mode
 				sessionStarts[sessionID] = attrs
 			}
 		}
+		if feature == "auto_inject" && attrs["outcome"] == "ok" && attrs["payload"] == "true" {
+			projectID := attrs["project_id"]
+			autoInjectByProject[projectID] = append(autoInjectByProject[projectID], timestamp)
+		}
 
 		// Match session ends with starts
 		if feature == "bench_session_end" {
@@ -412,6 +409,19 @@ func extractSessions(logPath string, since time.Time, projectFilter string, mode
 				Mode:           startAttrs["mode"],
 				TaskCategory:   startAttrs["category"],
 				Provenance:     startAttrs["provenance"],
+			}
+			if endMode := attrs["mode"]; endMode != "" {
+				session.Mode = endMode
+			}
+			if !since.IsZero() && timestamp.Before(since) {
+				continue
+			}
+			startedAt, _ := time.Parse(time.RFC3339, session.TimestampStart)
+			for _, injectedAt := range autoInjectByProject[session.ProjectID] {
+				if !injectedAt.Before(startedAt) && !injectedAt.After(timestamp) {
+					session.AutoInjectFired = true
+					break
+				}
 			}
 
 			// Parse numeric fields

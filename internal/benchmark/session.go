@@ -15,8 +15,9 @@ import (
 type BenchMode string
 
 const (
-	BenchModeOn  BenchMode = "on"
-	BenchModeOff BenchMode = "off"
+	BenchModeOn    BenchMode = "on"
+	BenchModeOff   BenchMode = "off"
+	BenchModeMixed BenchMode = "mode_mixed"
 )
 
 // Session represents one Kiro task execution for benchmark tracking.
@@ -47,16 +48,21 @@ type SessionTracker struct {
 	wg                sync.WaitGroup
 	stopped           bool
 	inactivityTimeout time.Duration
+	provenance        string
 }
 
 // NewSessionTracker creates a new session tracker with default 10-minute timeout.
 func NewSessionTracker(dataDir string) (*SessionTracker, error) {
-	return NewSessionTrackerWithTimeout(dataDir, 10*time.Minute)
+	return newSessionTracker(dataDir, 10*time.Minute, benchmarkProvenance("production"))
 }
 
 // NewSessionTrackerWithTimeout creates a new session tracker with custom timeout.
 // This is primarily for testing - production code should use NewSessionTracker.
 func NewSessionTrackerWithTimeout(dataDir string, inactivityTimeout time.Duration) (*SessionTracker, error) {
+	return newSessionTracker(dataDir, inactivityTimeout, benchmarkProvenance("test"))
+}
+
+func newSessionTracker(dataDir string, inactivityTimeout time.Duration, provenance string) (*SessionTracker, error) {
 	counter, err := NewTokenCounter()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token counter: %w", err)
@@ -75,6 +81,7 @@ func NewSessionTrackerWithTimeout(dataDir string, inactivityTimeout time.Duratio
 		dataDir:           dataDir,
 		stopChan:          make(chan struct{}),
 		inactivityTimeout: inactivityTimeout,
+		provenance:        provenance,
 	}
 
 	// Start inactivity timeout checker
@@ -88,9 +95,21 @@ func (t *SessionTracker) OnMCPCall(projectID string, reqContent string, respCont
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	currentMode, err := ReadBenchMode(t.dataDir)
+	if err == nil {
+		t.benchMode = currentMode
+	}
+
 	// Start new session if none exists
 	if t.currentSession == nil {
 		t.startSessionLocked(projectID, "other")
+	} else if t.currentSession.ProjectID == "" && projectID != "" {
+		t.currentSession.ProjectID = projectID
+	} else if projectID != "" && t.currentSession.ProjectID != projectID {
+		t.endSessionLocked(false)
+		t.startSessionLocked(projectID, "other")
+	} else if t.currentSession.Mode != t.benchMode && t.currentSession.Mode != BenchModeMixed {
+		t.currentSession.Mode = BenchModeMixed
 	}
 
 	// Update last activity
@@ -127,7 +146,7 @@ func (t *SessionTracker) startSessionLocked(projectID string, category string) {
 		Mode:         t.benchMode,
 		StartTime:    time.Now(),
 		TaskCategory: category,
-		Provenance:   benchmarkProvenance(),
+		Provenance:   t.provenance,
 	}
 
 	t.currentSession = session
@@ -144,12 +163,12 @@ func (t *SessionTracker) startSessionLocked(projectID string, category string) {
 	})
 }
 
-func benchmarkProvenance() string {
+func benchmarkProvenance(defaultValue string) string {
 	switch value := os.Getenv("MNEMOS_BENCH_PROVENANCE"); value {
 	case "test", "fixture", "synthetic", "dry-run", "production":
 		return value
 	default:
-		return "production"
+		return defaultValue
 	}
 }
 
@@ -185,6 +204,7 @@ func (t *SessionTracker) endSessionLocked(taskCompleted bool) {
 		"mcp_calls_count": t.currentSession.MCPCallsCount,
 		"task_completed":  taskCompleted,
 		"task_category":   t.currentSession.TaskCategory,
+		"mode":            string(t.currentSession.Mode),
 	})
 
 	t.currentSession = nil

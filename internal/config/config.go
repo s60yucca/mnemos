@@ -231,6 +231,9 @@ func LoadConfig(cfgFile string) (*Config, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
+		if cwd, err := os.Getwd(); err == nil {
+			v.AddConfigPath(filepath.Join(cwd, ".mnemos"))
+		}
 		home, _ := os.UserHomeDir()
 		v.AddConfigPath(filepath.Join(home, ".mnemos"))
 	}

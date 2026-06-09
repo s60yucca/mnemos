@@ -40,6 +40,9 @@ func (d *ProjectDetector) Detect() (string, string, error) {
 	if id := os.Getenv("MNEMOS_PROJECT_ID"); id != "" {
 		projectID = id
 		strategy = "env_var"
+	} else if id := os.Getenv("MNEMOS_PROJECT"); id != "" {
+		projectID = id
+		strategy = "legacy_env_var"
 	} else {
 		// Level 2: git root remote
 		gitRoot, err := d.findGitRoot()
@@ -149,9 +152,16 @@ func AutoInjectConfigFromEnv() AutoInjectConfig {
 
 // AutoInjector performs auto-injection of memory context.
 type AutoInjector struct {
-	mnemos  *core.Mnemos
-	cfg     AutoInjectConfig
-	dataDir string
+	mnemos            *core.Mnemos
+	cfg               AutoInjectConfig
+	dataDir           string
+	detectionStrategy string
+}
+
+// WithDetectionStrategy records how the project ID was resolved for telemetry.
+func (a *AutoInjector) WithDetectionStrategy(strategy string) *AutoInjector {
+	a.detectionStrategy = strategy
+	return a
 }
 
 // NewAutoInjector creates a new AutoInjector.
@@ -266,7 +276,7 @@ func (a *AutoInjector) Run(ctx context.Context, sessionID, projectID, clientID s
 		"session_id":         sessionID,
 		"memory_count":       len(filtered),
 		"tokens_used":        len(payload) / 4,
-		"detection_strategy": "", // Not strictly passed to Run(), could be omitted or passed down. Wait, spec says detection_strategy.
+		"detection_strategy": a.detectionStrategy,
 	})
 
 	return payload, "", nil

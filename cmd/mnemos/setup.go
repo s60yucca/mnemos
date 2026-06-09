@@ -44,14 +44,22 @@ func newSetupClientCmd(clientName string) *cobra.Command {
 		Use:   clientName,
 		Short: fmt.Sprintf("Set up Mnemos integration for %s", clientName),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			isGlobal, err := resolveScope(global, local)
-			if err != nil {
-				return err
+			isGlobal := true
+			if clientName != "codex" {
+				var err error
+				isGlobal, err = resolveScope(global, local)
+				if err != nil {
+					return err
+				}
 			}
 			if uninstall {
 				return runUninstall(clientName, isGlobal)
 			}
-			return runSetup(clientName, force, isGlobal)
+			projectID, err := cmd.Flags().GetString("project")
+			if err != nil {
+				return err
+			}
+			return runSetup(clientName, force, isGlobal, projectID)
 		},
 	}
 
@@ -115,7 +123,7 @@ func runUninstall(clientName string, global bool) error {
 }
 
 // runSetup performs the setup for a given client.
-func runSetup(clientName string, force, global bool) error {
+func runSetup(clientName string, force, global bool, projectIDOverride string) error {
 	clientCfg, ok := setup.Clients[clientName]
 	if !ok {
 		return fmt.Errorf("unknown client %q — supported: claude, kiro, cursor, gemini-cli, codex, trae", clientName)
@@ -185,7 +193,7 @@ func runSetup(clientName string, force, global bool) error {
 		}
 
 		// Derive project ID
-		projectID, err := setup.DeriveProjectID("")
+		projectID, err := setup.DeriveProjectID(projectIDOverride)
 		if err != nil {
 			return fmt.Errorf("derive project ID: %w", err)
 		}

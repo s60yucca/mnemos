@@ -46,8 +46,8 @@ func TestCodexIntegration_FreshInstall(t *testing.T) {
 		t.Errorf("args = %v", args)
 	}
 	env := mnemos["env"].(map[string]interface{})
-	if env["MNEMOS_PROJECT"] != "my-project" {
-		t.Errorf("MNEMOS_PROJECT = %v", env["MNEMOS_PROJECT"])
+	if env["MNEMOS_PROJECT_ID"] != "my-project" {
+		t.Errorf("MNEMOS_PROJECT_ID = %v", env["MNEMOS_PROJECT_ID"])
 	}
 }
 
@@ -108,7 +108,7 @@ func TestCodexIntegration_ForceUpdate(t *testing.T) {
 	existing := `[mcp_servers.mnemos]
 command = "/old/path/mnemos"
 args = ["serve"]
-env = { "MNEMOS_PROJECT" = "old-project", "CUSTOM_VAR" = "keep-me" }
+env = { "MNEMOS_PROJECT_ID" = "old-project", "CUSTOM_VAR" = "keep-me" }
 timeout = 60
 `
 	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
@@ -134,8 +134,8 @@ timeout = 60
 	}
 
 	env := mnemos["env"].(map[string]interface{})
-	if env["MNEMOS_PROJECT"] != "new-project" {
-		t.Error("MNEMOS_PROJECT not updated")
+	if env["MNEMOS_PROJECT_ID"] != "new-project" {
+		t.Error("MNEMOS_PROJECT_ID not updated")
 	}
 	if _, ok := env["CUSTOM_VAR"]; ok {
 		t.Error("CUSTOM_VAR should be removed with --force")
@@ -304,7 +304,7 @@ func TestCodexIntegration_PreserveCustomEnvVars(t *testing.T) {
 	existing := `[mcp_servers.mnemos]
 command = "/old/path/mnemos"
 args = ["serve"]
-env = { "MNEMOS_PROJECT" = "old-project", "CUSTOM_DEBUG" = "true", "EXTRA_VAR" = "value" }
+env = { "MNEMOS_PROJECT_ID" = "old-project", "CUSTOM_DEBUG" = "true", "EXTRA_VAR" = "value" }
 `
 	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
 		t.Fatalf("setup failed: %v", err)
@@ -350,7 +350,7 @@ func TestCodexIntegration_PreserveCommentsInSections(t *testing.T) {
 command = "/old/path/mnemos"
 args = ["serve"]
 # project scoping
-env = { "MNEMOS_PROJECT" = "old-project" }
+env = { "MNEMOS_PROJECT_ID" = "old-project" }
 `
 	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
 		t.Fatalf("setup failed: %v", err)

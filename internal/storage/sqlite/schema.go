@@ -110,6 +110,13 @@ func Open(path string) (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0) // Reuse connection forever
 
+	// Set the lock wait before schema initialization. Applying it afterwards
+	// leaves concurrent process startup vulnerable to an immediate SQLITE_BUSY.
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set sqlite startup busy timeout: %w", err)
+	}
+
 	if err := applySchema(db); err != nil {
 		db.Close()
 		return nil, err
@@ -156,6 +163,10 @@ func OpenReadOnly(path string) (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
 
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set sqlite read-only busy timeout: %w", err)
+	}
 	if _, err := db.Exec("PRAGMA query_only = ON"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("enable sqlite query_only: %w", err)

@@ -508,3 +508,25 @@ func TestBusyTimeoutPreventsImmediateFailure(t *testing.T) {
 		t.Fatal("db2 write timed out (busy_timeout may not be working)")
 	}
 }
+
+func TestOpenConcurrentStartup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "concurrent-open.db")
+	start := make(chan struct{})
+	errors := make(chan error, 4)
+
+	for i := 0; i < 4; i++ {
+		go func() {
+			<-start
+			db, err := Open(path)
+			if err == nil {
+				err = db.Close()
+			}
+			errors <- err
+		}()
+	}
+	close(start)
+
+	for i := 0; i < 4; i++ {
+		require.NoError(t, <-errors)
+	}
+}

@@ -203,15 +203,8 @@ func (g *QualityGate) Evaluate(req *domain.StoreRequest, recent []*domain.Memory
 	action := g.verdictFromScore(score, issues)
 
 	switch action {
-	case VerdictReject, VerdictDowngrade:
+	case VerdictFix, VerdictDowngrade:
 		slog.Info("quality_gate",
-			"action", action,
-			"score", score,
-			"issues_count", len(issues),
-			"content_preview", truncate(content, 80),
-		)
-	default: // VerdictAccept, VerdictFix, VerdictMerge
-		slog.Debug("quality_gate",
 			"action", action,
 			"score", score,
 			"issues_count", len(issues),

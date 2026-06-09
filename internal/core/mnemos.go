@@ -207,8 +207,15 @@ func (m *Mnemos) AssembleContext(ctx context.Context, query, projectID string, m
 	// Touch access on every returned memory so retrieval counts as usage.
 	// This prevents persistent knowledge from decaying as if never accessed.
 	for _, mem := range result.Memories {
-		mem.TouchAccess()
-		if err := m.store.Update(ctx, mem); err != nil {
+		stored, err := m.store.GetByID(ctx, mem.ID)
+		if err != nil {
+			m.logger.Warn("load memory for access tracking failed", "id", mem.ID, "err", err)
+			continue
+		}
+		stored.TouchAccess()
+		mem.AccessCount = stored.AccessCount
+		mem.LastAccessedAt = stored.LastAccessedAt
+		if err := m.store.Update(ctx, stored); err != nil {
 			m.logger.Warn("touch access failed", "id", mem.ID, "err", err)
 		}
 	}

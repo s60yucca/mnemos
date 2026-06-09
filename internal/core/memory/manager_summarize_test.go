@@ -125,3 +125,27 @@ func TestManagerSummarize_UpdateExplicitSummaryNotOverwritten(t *testing.T) {
 	require.NotNil(t, updated)
 	assert.Equal(t, "keep this", updated.Summary, "explicit summary should not be overwritten by auto-generation")
 }
+
+func TestManagerSummarize_UpdateUsesNewType(t *testing.T) {
+	m := newManagerForSummarizeTest(t)
+	ctx := context.Background()
+
+	result, err := m.Store(ctx, &domain.StoreRequest{
+		Content:   "Initial architecture note contains enough words to generate a stable summary for later updates.",
+		Type:      domain.MemoryTypeSemantic,
+		ProjectID: "summary-type",
+	})
+	require.NoError(t, err)
+
+	content := "Run deployment carefully. 1. Build the release artifact. 2. Verify checksums before publishing. Finish by recording the exact command."
+	memType := domain.MemoryTypeSkill
+	updated, err := m.Update(ctx, &domain.UpdateRequest{
+		ID:      result.Memory.ID,
+		Content: &content,
+		Type:    &memType,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, memType, updated.Type)
+	assert.Equal(t, ExtractSummary(content, memType, 30), updated.Summary)
+}

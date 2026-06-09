@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -46,6 +45,7 @@ is compiling usefully or accumulating noise.`,
 			if err != nil {
 				return fmt.Errorf("list memories: %w", err)
 			}
+			memories = filterUserFacingMemories(memories)
 
 			if len(memories) == 0 {
 				printEvalHeader(project, len(memories), stats)
@@ -249,28 +249,9 @@ func printRetrievalUsefulness(memories []*domain.Memory) {
 }
 
 func printOverallScore(memories []*domain.Memory) {
-	var qualitySum float64
-	for _, m := range memories {
-		qualitySum += m.QualityScore
-	}
-	avgQuality := qualitySum / float64(maxEval(len(memories), 1))
-
-	_, dupPenalty := duplicationStats(memories)
-	now := time.Now().UTC()
-	thirtyDays := now.Add(-30 * 24 * time.Hour)
-	var staleCount int
-	for _, m := range memories {
-		if m.LastAccessedAt.Before(thirtyDays) {
-			staleCount++
-		}
-	}
-	stalePenalty := 0.0
-	if len(memories) > 0 {
-		stalePenalty = float64(staleCount) / float64(len(memories))
-	}
-
-	score := avgQuality * (1.0 - dupPenalty*0.3) * (1.0 - stalePenalty*0.4)
-	score = math.Max(0, math.Min(1, score))
+	metrics := calculateEvalMetrics(memories, 0)
+	score := metrics.score
+	stalePenalty := float64(metrics.stale) / float64(maxEval(metrics.active, 1))
 
 	grade := "A"
 	switch {
@@ -287,7 +268,7 @@ func printOverallScore(memories []*domain.Memory) {
 	}
 
 	fmt.Printf("Overall Score: %.2f (%s)\n", score, grade)
-	fmt.Printf("  (quality %.0f%% × duplicate penalty %.0f%% × freshness penalty %.0f%%)\n", avgQuality*100, dupPenalty*30, stalePenalty*40)
+	fmt.Printf("  (quality %.0f%% × duplicate penalty %.0f%% × freshness penalty %.0f%%)\n", metrics.quality*100, metrics.duplicate*30, stalePenalty*40)
 	fmt.Printf("  Retrieval usefulness is reported separately and does not lower this quality score.\n")
 }
 

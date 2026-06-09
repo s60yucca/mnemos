@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/benchmark"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBenchMode_Toggle verifies that "mnemos bench mode" writes the mode file
@@ -92,7 +94,7 @@ func TestBenchExport_ValidSessions(t *testing.T) {
 	os.Setenv("HOME", testHome)
 	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
 
-	logDir := filepath.Join(testHome, ".mnemos", "logs")
+	logDir := filepath.Join(tmpDir, "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		t.Fatalf("failed to create log dir: %v", err)
 	}
@@ -131,7 +133,7 @@ func TestBenchExport_ValidSessions(t *testing.T) {
 	}
 
 	header := lines[0]
-	expectedHeader := "session_id,timestamp_start,timestamp_end,project_id,mode,duration_ms,tokens_in,tokens_out,mcp_calls_count,task_completed,task_category,provenance"
+	expectedHeader := "session_id,timestamp_start,timestamp_end,project_id,mode,duration_ms,tokens_in,tokens_out,mcp_calls_count,task_completed,task_category,provenance,auto_inject_fired"
 	if header != expectedHeader {
 		t.Errorf("header mismatch:\nexpected: %s\ngot:      %s", expectedHeader, header)
 	}
@@ -177,7 +179,7 @@ func TestBenchExport_Filtering(t *testing.T) {
 	os.Setenv("HOME", testHome)
 	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
 
-	logDir := filepath.Join(testHome, ".mnemos", "logs")
+	logDir := filepath.Join(tmpDir, "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		t.Fatalf("failed to create log dir: %v", err)
 	}
@@ -244,6 +246,26 @@ func TestBenchExport_Filtering(t *testing.T) {
 	}
 }
 
+func TestExtractSessions_UsesFinalModeAndAutoInjectEvidence(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "features.log")
+	start := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	content := start.Format(time.RFC3339) + "\tbench_session_start\tsession_id=sess-mixed project_id=proj-1 mode=on category=feature timestamp=" + start.Format(time.RFC3339) + " provenance=production\n"
+	content += start.Add(time.Minute).Format(time.RFC3339) + "\tauto_inject\tproject_id=proj-1 outcome=ok payload=true\n"
+	content += start.Add(2*time.Minute).Format(time.RFC3339) + "\tbench_session_end\tsession_id=sess-mixed mode=mode_mixed duration_ms=120000 tokens_in=100 tokens_out=200 mcp_calls_count=2 task_completed=true\n"
+	require.NoError(t, os.WriteFile(logPath, []byte(content), 0o644))
+
+	excluded, err := extractSessions(logPath, time.Time{}, "", "", false)
+	require.NoError(t, err)
+	assert.Empty(t, excluded)
+
+	included, err := extractSessions(logPath, time.Time{}, "", "", true)
+	require.NoError(t, err)
+	require.Len(t, included, 1)
+	assert.Equal(t, "mode_mixed", included[0].Mode)
+	assert.True(t, included[0].AutoInjectFired)
+	assert.Equal(t, "production", included[0].Provenance)
+}
+
 // TestBenchStatus_CurrentMode verifies that status displays the current mode.
 func TestBenchStatus_CurrentMode(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -292,7 +314,7 @@ func TestBenchStatus_SessionCounts(t *testing.T) {
 	os.Setenv("HOME", testHome)
 	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
 
-	logDir := filepath.Join(testHome, ".mnemos", "logs")
+	logDir := filepath.Join(tmpDir, "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		t.Fatalf("failed to create log dir: %v", err)
 	}

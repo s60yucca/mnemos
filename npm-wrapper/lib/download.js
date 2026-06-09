@@ -19,12 +19,13 @@ const { pipeline } = require('stream/promises');
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
+    const removePartial = () => fs.rmSync(dest, { force: true });
     
     https.get(url, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
         // Follow redirect
         file.close();
-        fs.unlinkSync(dest);
+        removePartial();
         return downloadFile(response.headers.location, dest)
           .then(resolve)
           .catch(reject);
@@ -32,7 +33,7 @@ function downloadFile(url, dest) {
       
       if (response.statusCode !== 200) {
         file.close();
-        fs.unlinkSync(dest);
+        removePartial();
         return reject(new Error(`HTTP ${response.statusCode}: ${url}`));
       }
       
@@ -44,13 +45,13 @@ function downloadFile(url, dest) {
       });
     }).on('error', (err) => {
       file.close();
-      fs.unlinkSync(dest);
+      removePartial();
       reject(err);
     });
     
     file.on('error', (err) => {
       file.close();
-      fs.unlinkSync(dest);
+      removePartial();
       reject(err);
     });
   });
