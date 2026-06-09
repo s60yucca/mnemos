@@ -28,7 +28,7 @@ Agent action → mnemos auto-pipeline:
                 ├── 3-tier dedup        (hash → fuzzy → semantic)
                 ├── Auto-summarize      (extractive, fast; LLM if available)
                 ├── File linking        (extract identifiers, link to code)
-                ├── Type classification (episodic / long_term / semantic / working)
+                ├── Type classification (episodic / long_term / semantic / skill)
                 ├── Quality scoring     (for retrieval ranking)
                 └── Decay scheduling    (so knowledge base stays relevant)
 
@@ -40,7 +40,9 @@ Retrieval:
                 └── Token-budget cap    (always fits in context)
 ```
 
-You don't call any of this. Your agent doesn't call any of this. Hooks fire it automatically on session start, prompt submit, and session end.
+The pipeline runs behind the MCP and hook interfaces. Agents use normal memory
+tools; they do not need to orchestrate deduplication, summarization, ranking,
+packing, or lifecycle maintenance themselves.
 
 ---
 
@@ -83,15 +85,15 @@ brew install s60yucca/tap/mnemos && mnemos setup claude
 # curl (verify mnemos.dev is live before using)
 curl -fsSL https://mnemos.dev/install.sh | bash && mnemos setup claude
 
-# npm (coming in v1.2)
-# npx mnemos setup claude
+# npm wrapper
+npx -y @s60yucca/mnemos setup claude
 
 # Build from source (requires Go 1.23+)
 git clone https://github.com/s60yucca/mnemos
 cd mnemos && make build
 ```
 
-Swap `claude` for `cursor`, `kiro`, `gemini-cli`, or `codex`. Restart your client. Autopilot runs from here.
+Swap `claude` for `cursor`, `kiro`, `gemini-cli`, `codex`, or `trae`. Restart your client. Autopilot runs from here.
 
 ---
 
@@ -126,6 +128,7 @@ Beyond hooks, mnemos runs a background daemon that continuously improves your kn
 - **Contradiction detection** — finds memories that conflict with each other
 - **Relation inference** — automatically links related memories
 - **Backfill** — retroactively generates summaries for memories that lack them
+- **Auto-compile** — compiles eligible source memories into reusable project knowledge
 
 ```bash
 mnemos autopilot status          # check daemon state
@@ -133,6 +136,26 @@ mnemos autopilot run             # trigger immediate run
 mnemos autopilot run --dry-run   # preview findings without writing
 mnemos autopilot report          # view latest findings
 ```
+
+---
+
+## Verify the automatic loop
+
+Mnemos exposes separate views for configuration, raw activity, knowledge
+quality, and end-to-end loop readiness:
+
+```bash
+mnemos status                    # effective data path and automatic feature settings
+mnemos health                    # raw feature firing rates and denominators
+mnemos eval --project myapp      # memory quality, duplication, freshness, usefulness
+mnemos check --project myapp     # consolidated read-only loop verification
+mnemos check --launch            # stricter public-launch readiness gates
+```
+
+`mnemos check` opens the database read-only. It does not run migrations,
+start workers, or modify memories. `mnemos check --fix` is intentionally
+narrow: it only archives older generated autopilot reports after producing a
+verified cleanup plan.
 
 ---
 
@@ -160,8 +183,8 @@ Most operations stay under 60 ms regardless of dataset size. Hook subcommands us
 | Tool | What it does |
 |---|---|
 | `mnemos_store` | Store a memory (full auto-pipeline runs transparently) |
-| `mnemos_search` | Hybrid FTS + semantic + file-overlap search with MMR |
-| `mnemos_context` | Assemble budget-aware, diversified context for session start |
+| `mnemos_search` | Hybrid FTS + semantic + file-overlap search |
+| `mnemos_context` | Assemble budget-aware, MMR-diversified context |
 | `mnemos_get` | Fetch by ID |
 | `mnemos_update` | Update content, summary, or tags |
 | `mnemos_delete` | Soft-delete (recoverable via maintain) |
@@ -187,7 +210,7 @@ mnemos maintain
 Most users never touch this. But if you want:
 
 ```yaml
-# ~/.mnemos/config.yaml
+# .mnemos/config.yaml (project-local) or ~/.mnemos/config.yaml (global)
 embeddings:
   provider: noop              # noop (default) | ollama | openai
   # Pure FTS works fine. Enable semantic for meaning-based search.
@@ -216,7 +239,13 @@ autopilot:
   enabled: true
   interval: 15m
   contradiction_enabled: false
+  auto_compile_enabled: true
+  min_auto_compile_sources: 5
 ```
+
+Resolution order is: explicit `--config`, project-local
+`.mnemos/config.yaml`, then `~/.mnemos/config.yaml`. Environment variables use
+the `MNEMOS_` prefix.
 
 ---
 
@@ -230,7 +259,8 @@ Mnemos auto-classifies. Override manually via `--type` flag.
 | `episodic` | medium (~1 month) | session events, bug fixes |
 | `long_term` | slow (~6 months) | architecture decisions |
 | `semantic` | very slow | facts, definitions, knowledge |
-| `working` | fast | active task context |
+| `skill` | slow | repeatable procedures and operational workflows |
+| `compiled` | managed | auto-compiled project knowledge |
 
 ---
 
@@ -256,7 +286,10 @@ mnemos setup codex        # writes ~/.codex/config.toml (global, CLI + VSCode)
 
 Flags: `--global` (install for all projects), `--force` (overwrite existing), `--project <id>` (override project ID).
 
-> **Codex note:** Codex uses a single global config shared between the CLI and VSCode extension. `--global` and `--local` flags are ignored — it always writes to `~/.codex/config.toml`. Restart both Codex CLI and the VSCode extension after setup.
+> **Codex note:** Codex uses a single global config shared between the CLI and
+> VSCode extension. `--global` and `--local` are ignored. The setup command
+> writes `MNEMOS_PROJECT_ID` and accepts `--project <id>` as an explicit
+> override. Restart both Codex CLI and the VSCode extension after setup.
 
 ---
 
@@ -292,6 +325,7 @@ mnemos delete <id>                                    # soft delete
 mnemos relate <src> <tgt> --type supersedes           # typed relation
 mnemos stats                                          # storage + quality stats
 mnemos maintain                                       # decay + stale + GC
+mnemos status                                         # automatic feature configuration
 mnemos eval [--project myapp]                         # knowledge quality metrics
 mnemos health [--project myapp]                       # raw feature activity
 mnemos check [--project myapp]                        # verify the automatic knowledge loop
@@ -314,7 +348,7 @@ mnemos backfill summaries --project <id> [--dry-run] [--limit N]
 # Benchmark readiness
 mnemos bench status
 mnemos bench mode on | off
-mnemos bench export [--project <id>] [--output sessions.csv]
+mnemos bench export [--project <id>] [--include-mixed] [--output sessions.csv]
 
 # Hook subcommands (called by clients, not manually)
 mnemos hook session-start
@@ -339,8 +373,8 @@ Mnemos does one thing: **give agents a knowledge base that compiles itself.**
 
 See [ROADMAP.md](ROADMAP.md). Short version:
 
-- **v1.1.x (shipped):** full auto-pipeline, MMR context assembly, file-aware retrieval, passive autopilot daemon, benchmark framework, Codex support
-- **v1.2 (next):** `mnemos check` loop verification, provenance-backed launch readiness, HN launch
+- **v1.1.14 (current):** full auto-pipeline, auto-compile, passive auto-inject, loop verification, provenance-backed benchmarks, Codex support
+- **v1.2 (next):** distribution, public benchmark evidence, MCP Registry, HN launch
 - **v1.3 (planned):** team memory via git — shared `.mnemos/shared/` for teammate knowledge
 - **v2.0+ (TBD):** cross-project memory scopes, memory compaction, driven by user feedback
 
