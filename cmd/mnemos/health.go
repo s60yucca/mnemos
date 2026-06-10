@@ -135,6 +135,12 @@ func classifyFeature(featureEvents []Event, allEvents []Event, baseline observe.
 }
 
 func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents []Event, baseline observe.Baseline, activeDays []time.Time) Status {
+	if len(activeDays) == 0 {
+		// A sparse window cannot establish whether a feature is under-firing.
+		// Treat it as insufficient evidence rather than a failure.
+		return StatusUnknown
+	}
+
 	if len(featureEvents) == 0 {
 		if baseline.RatioVsMCPCalls > 0 {
 			for _, event := range allEvents {
@@ -145,11 +151,6 @@ func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents [
 			return StatusUnknown
 		}
 		return StatusNotFiring
-	}
-
-	if len(activeDays) == 0 {
-		// The feature fired, but there is not enough MCP activity to compare against baselines.
-		return StatusLow
 	}
 
 	// Group feature events by day

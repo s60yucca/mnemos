@@ -98,6 +98,34 @@ func TestAggregateUnknownDailyAndLaunch(t *testing.T) {
 	assert.Equal(t, CheckFail, aggregateCheckStatus(signals, true))
 }
 
+func TestFeatureHealthSparseTrafficDoesNotFail(t *testing.T) {
+	now := time.Now().UTC()
+	events := []Event{
+		{Timestamp: now, Feature: "store_call"},
+		{Timestamp: now, Feature: "quality_gate"},
+		{Timestamp: now, Feature: "dedup"},
+		{Timestamp: now, Feature: "context_call"},
+		{Timestamp: now, Feature: "mmr"},
+	}
+
+	signal := featureHealthSignal(events)
+	assert.Equal(t, CheckUnknown, signal.Status)
+	assert.Contains(t, signal.Value, "0 critical low")
+}
+
+func TestVersionFromExecutablePathResolvesHomebrewSymlink(t *testing.T) {
+	root := t.TempDir()
+	targetDir := filepath.Join(root, "Caskroom", "mnemos", "1.1.16")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	target := filepath.Join(targetDir, "mnemos")
+	require.NoError(t, os.WriteFile(target, []byte("binary"), 0o755))
+	link := filepath.Join(root, "bin", "mnemos")
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+	require.NoError(t, os.Symlink(target, link))
+
+	assert.Equal(t, "1.1.16", versionFromExecutablePath(link))
+}
+
 func TestApplyCheckFixesArchivesOnlyVerifiedReport(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "mnemos.db")
 	db, err := sqlitestore.Open(dbPath)

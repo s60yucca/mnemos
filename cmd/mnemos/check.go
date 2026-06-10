@@ -597,6 +597,12 @@ func versionFromExecutablePath(path string) string {
 	if len(match) == 2 {
 		return match[1]
 	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != path {
+		match = versionPathPattern.FindStringSubmatch(filepath.ToSlash(resolved))
+		if len(match) == 2 {
+			return match[1]
+		}
+	}
 	return ""
 }
 

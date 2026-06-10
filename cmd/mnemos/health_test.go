@@ -332,6 +332,25 @@ func TestClassifyFeature_LowActivity(t *testing.T) {
 	}
 }
 
+func TestClassifyFeature_SparseWindowIsUnknown(t *testing.T) {
+	now := time.Now().UTC()
+	events := []Event{
+		{Timestamp: now, Feature: "store_call"},
+		{Timestamp: now, Feature: "quality_gate"},
+	}
+	baseline := observe.Baseline{RatioVsMCPCalls: 0.95}
+
+	status := classifyFeatureNamed("quality_gate", events[1:], events, baseline, detectActiveDays(events))
+	if status != StatusUnknown {
+		t.Errorf("expected StatusUnknown for insufficient activity, got %v", status)
+	}
+
+	missing := classifyFeatureNamed("dedup", nil, events, baseline, detectActiveDays(events))
+	if missing != StatusUnknown {
+		t.Errorf("expected missing feature to remain unknown without an active day, got %v", missing)
+	}
+}
+
 func TestClassifyFeature_ObservedBelowBaselineIsLowActivity(t *testing.T) {
 	// Create events with 3 consecutive days of no activity, but with the feature
 	// still observed in the window. This should be LOW ACTIVITY, not not observed.
