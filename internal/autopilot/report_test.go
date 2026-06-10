@@ -9,6 +9,7 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/storage"
+	"github.com/mnemos-dev/mnemos/internal/util"
 )
 
 // helpers to build test findings
@@ -122,6 +123,59 @@ func TestReportWriter_ArchivesOlderReports(t *testing.T) {
 	}
 	if len(archivedReports) != 1 {
 		t.Fatalf("expected one archived report, got %d", len(archivedReports))
+	}
+}
+
+// TestReportWriter_DrainsBacklogBeyondPageLimit verifies that a pre-existing
+// backlog of active reports larger than the internal pagination window is fully
+// archived, leaving exactly one active report. Regression for the prior
+// fixed Limit:1000 query that stranded the oldest reports permanently active.
+func TestReportWriter_DrainsBacklogBeyondPageLimit(t *testing.T) {
+	env := newStalenessTestEnv(t)
+	ctx := context.Background()
+	projectID := "report-backlog"
+	writer := NewReportWriter(env.mnemos)
+
+	// Seed more active autopilot reports than a single archival page (500).
+	const backlog = 1100
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < backlog; i++ {
+		ts := base.Add(time.Duration(i) * time.Minute)
+		m := &domain.Memory{
+			ID:             util.NewID(),
+			Content:        "## Autopilot Report (seed)",
+			Type:           domain.MemoryTypeSemantic,
+			Category:       "autopilot",
+			Source:         "autopilot-daemon",
+			Tags:           []string{"autopilot-report", "auto-generated"},
+			ProjectID:      projectID,
+			Status:         domain.MemoryStatusActive,
+			CreatedAt:      ts,
+			UpdatedAt:      ts,
+			LastAccessedAt: ts,
+			RelevanceScore: 1.0,
+			ContentHash:    util.NewID(),
+		}
+		if err := env.store.Create(ctx, m); err != nil {
+			t.Fatalf("seed report %d: %v", i, err)
+		}
+	}
+
+	if err := writer.Write(ctx, projectID, []Finding{relationsFinding(1, "internal/a.go")}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	activeReports, err := env.mnemos.List(ctx, storage.ListQuery{
+		ProjectID:  projectID,
+		Statuses:   []domain.MemoryStatus{domain.MemoryStatusActive},
+		Categories: []string{"autopilot"},
+		Limit:      backlog + 10,
+	})
+	if err != nil {
+		t.Fatalf("list active reports: %v", err)
+	}
+	if len(activeReports) != 1 {
+		t.Fatalf("expected exactly one active autopilot report after draining backlog, got %d", len(activeReports))
 	}
 }
 

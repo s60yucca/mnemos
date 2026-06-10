@@ -203,6 +203,14 @@ func (s *SQLiteStore) ListForLifecycle(ctx context.Context, q storage.LifecycleQ
 			args = append(args, string(st))
 		}
 	}
+	if len(q.Categories) > 0 {
+		ph := strings.Repeat("?,", len(q.Categories))
+		ph = ph[:len(ph)-1]
+		conditions = append(conditions, fmt.Sprintf("category IN (%s)", ph))
+		for _, c := range q.Categories {
+			args = append(args, c)
+		}
+	}
 
 	where := ""
 	if len(conditions) > 0 {

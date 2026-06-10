@@ -73,6 +73,7 @@ type LifecycleQuery struct {
 	LastAccessBefore *time.Time
 	UpdatedBefore    *time.Time
 	Statuses         []domain.MemoryStatus
+	Categories       []string // restrict to these categories (SQL IN)
 	Limit            int
 }
 

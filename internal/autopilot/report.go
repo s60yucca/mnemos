@@ -38,34 +38,52 @@ func (w *ReportWriter) Write(ctx context.Context, projectID string, findings []F
 	return w.archiveOlderReports(ctx, projectID, res.Memory.ID)
 }
 
+// archiveOlderReports archives every active autopilot report for the project
+// except keepID, leaving exactly one active report behind.
+//
+// The query is scoped to category="autopilot" (honored by the SQL builder) and
+// paginated in a loop: listing only the newest page and archiving everything but
+// keepID, then repeating until a pass archives nothing. This avoids the prior
+// fixed Limit:1000 blind spot, where a backlog larger than the window stranded
+// the oldest reports (the ones most in need of archival) permanently active.
 func (w *ReportWriter) archiveOlderReports(ctx context.Context, projectID, keepID string) error {
-	reports, err := w.mnemos.List(ctx, storage.ListQuery{
-		ProjectID: projectID,
-		Statuses:  []domain.MemoryStatus{domain.MemoryStatusActive},
-		Limit:     1000,
-		SortBy:    "created_at",
-		SortDesc:  true,
-	})
-	if err != nil {
-		return err
-	}
-
 	archived := domain.MemoryStatusArchived
-	for _, report := range reports {
-		if report.ID == keepID || report.Category != "autopilot" || report.Source != "autopilot-daemon" {
-			continue
-		}
-		if !hasTag(report.Tags, "autopilot-report") {
-			continue
-		}
-		if _, err := w.mnemos.Update(ctx, &domain.UpdateRequest{
-			ID:     report.ID,
-			Status: &archived,
-		}); err != nil {
+	for {
+		reports, err := w.mnemos.List(ctx, storage.ListQuery{
+			ProjectID:  projectID,
+			Statuses:   []domain.MemoryStatus{domain.MemoryStatusActive},
+			Categories: []string{"autopilot"},
+			Limit:      500,
+			SortBy:     "created_at",
+			SortDesc:   true,
+		})
+		if err != nil {
 			return err
 		}
+
+		archivedAny := false
+		for _, report := range reports {
+			if report.ID == keepID || report.Source != "autopilot-daemon" {
+				continue
+			}
+			if !hasTag(report.Tags, "autopilot-report") {
+				continue
+			}
+			if _, err := w.mnemos.Update(ctx, &domain.UpdateRequest{
+				ID:     report.ID,
+				Status: &archived,
+			}); err != nil {
+				return err
+			}
+			archivedAny = true
+		}
+
+		// A pass that archives nothing means only keepID (and any non-daemon
+		// autopilot memories) remain — the backlog is fully drained.
+		if !archivedAny {
+			return nil
+		}
 	}
-	return err
 }
 
 func hasTag(tags []string, want string) bool {

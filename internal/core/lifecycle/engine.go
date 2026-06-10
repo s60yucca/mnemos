@@ -146,7 +146,11 @@ func (e *Engine) RunArchival(ctx context.Context, projectID string) error {
 	return nil
 }
 
-// RunGC hard-deletes memories with status=deleted older than retention period
+// RunGC hard-deletes memories with status=deleted older than retention period,
+// and purges archived autopilot reports older than retention. Autopilot reports
+// are generated snapshots that get archived on every superseding write (keeping
+// only the latest active); without this pass they would accumulate in the
+// archived state forever, since the deleted-status GC never reaches them.
 func (e *Engine) RunGC(ctx context.Context, projectID string) error {
 	cutoff := time.Now().UTC().AddDate(0, 0, -e.gcRetentionDays)
 	memories, err := e.store.ListForLifecycle(ctx, storage.LifecycleQuery{
@@ -167,7 +171,55 @@ func (e *Engine) RunGC(ctx context.Context, projectID string) error {
 	if len(memories) > 0 {
 		e.logger.Info("gc complete", "deleted", len(memories))
 	}
+
+	reportsPurged, err := e.gcArchivedReports(ctx, projectID, cutoff)
+	if err != nil {
+		return err
+	}
+	if reportsPurged > 0 {
+		e.logger.Info("gc archived reports complete", "deleted", reportsPurged)
+	}
 	return nil
+}
+
+// gcArchivedReports hard-deletes archived autopilot reports older than the
+// cutoff, draining any backlog in batches. Scoped to category="autopilot" and
+// the autopilot-daemon source so legitimately archived user memories are never
+// touched.
+func (e *Engine) gcArchivedReports(ctx context.Context, projectID string, cutoff time.Time) (int, error) {
+	const batchSize = 1000
+	purged := 0
+	for {
+		reports, err := e.store.ListForLifecycle(ctx, storage.LifecycleQuery{
+			ProjectID:     projectID,
+			Statuses:      []domain.MemoryStatus{domain.MemoryStatusArchived},
+			Categories:    []string{"autopilot"},
+			UpdatedBefore: &cutoff,
+			Limit:         batchSize,
+		})
+		if err != nil {
+			return purged, err
+		}
+
+		deletedThisBatch := 0
+		for _, mem := range reports {
+			if mem.Source != "autopilot-daemon" {
+				continue
+			}
+			if err := e.store.HardDelete(ctx, mem.ID); err != nil {
+				e.logger.Warn("gc report hard delete failed", "id", mem.ID, "err", err)
+				continue
+			}
+			deletedThisBatch++
+		}
+		purged += deletedThisBatch
+
+		// Stop when the batch is exhausted, or when no row in a full batch
+		// matched the source filter (avoids looping on the same rows forever).
+		if len(reports) < batchSize || deletedThisBatch == 0 {
+			return purged, nil
+		}
+	}
 }
 
 // PromoteMemory resets a memory's relevance score to 1.0
