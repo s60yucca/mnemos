@@ -98,7 +98,7 @@ func TestUpdateFields_ExistingFields(t *testing.T) {
 		"env = { \"PROJECT\" = \"test\" }",
 	}
 
-	result := updateFields(sectionLines, "/new/path/mnemos", "test-project")
+	result := updateFields(sectionLines, "/new/path/mnemos")
 
 	// Check command updated
 	if !strings.Contains(result[0], "/new/path/mnemos") {
@@ -123,13 +123,13 @@ func TestUpdateFields_MigratesLegacyProjectEnv(t *testing.T) {
 		`env = { "MNEMOS_PROJECT" = "old-project", "CUSTOM_VAR" = "keep" }`,
 	}
 
-	result := strings.Join(updateFields(sectionLines, "mnemos", "new-project"), "\n")
+	result := strings.Join(updateFields(sectionLines, "mnemos"), "\n")
 
 	if strings.Contains(result, `"MNEMOS_PROJECT"`) {
 		t.Fatalf("legacy project key was not removed: %s", result)
 	}
-	if !strings.Contains(result, `"MNEMOS_PROJECT_ID" = "new-project"`) {
-		t.Fatalf("canonical project key was not written: %s", result)
+	if strings.Contains(result, `"MNEMOS_PROJECT_ID"`) {
+		t.Fatalf("project key was not removed: %s", result)
 	}
 	if !strings.Contains(result, `"CUSTOM_VAR" = "keep"`) {
 		t.Fatalf("custom env was not preserved: %s", result)
@@ -143,7 +143,7 @@ func TestUpdateFields_PreserveIndentation(t *testing.T) {
 		"  timeout = 30",
 	}
 
-	result := updateFields(sectionLines, "/new/path/mnemos", "test-project")
+	result := updateFields(sectionLines, "/new/path/mnemos")
 
 	// Check indentation preserved
 	if !strings.HasPrefix(result[0], "  ") {
@@ -163,7 +163,7 @@ func TestUpdateFields_AppendMissing(t *testing.T) {
 		"timeout = 30",
 	}
 
-	result := updateFields(sectionLines, "/path/mnemos", "test-project")
+	result := updateFields(sectionLines, "/path/mnemos")
 
 	// Should have 4 lines: env, timeout, command, args
 	if len(result) != 4 {
@@ -198,7 +198,7 @@ func TestUpdateFields_InlineComments(t *testing.T) {
 		"env = { \"PROJECT\" = \"test\" }",
 	}
 
-	result := updateFields(sectionLines, "/new/path/mnemos", "test-project")
+	result := updateFields(sectionLines, "/new/path/mnemos")
 
 	// Command should be updated (inline comment may be lost)
 	if !strings.Contains(result[0], "/new/path/mnemos") {
@@ -283,9 +283,8 @@ func TestMergeCodexTOML_AppendToEmptyFile(t *testing.T) {
 		t.Errorf("args = %v, want [serve]", args)
 	}
 
-	env, ok := mnemos["env"].(map[string]interface{})
-	if !ok || env["MNEMOS_PROJECT_ID"] != "test-project" {
-		t.Errorf("env = %v, want {MNEMOS_PROJECT_ID: test-project}", env)
+	if _, ok := mnemos["env"]; ok {
+		t.Errorf("env should not be written for global Codex config: %v", mnemos["env"])
 	}
 }
 
@@ -382,10 +381,13 @@ timeout = 30
 		t.Errorf("args not updated: %v", args)
 	}
 
-	// Env and timeout should be preserved
+	// Custom env and timeout should be preserved, but project env should be removed.
 	env := mnemos["env"].(map[string]interface{})
 	if env["CUSTOM_VAR"] != "value" {
 		t.Error("custom env var not preserved")
+	}
+	if _, ok := env["MNEMOS_PROJECT_ID"]; ok {
+		t.Error("MNEMOS_PROJECT_ID should be removed")
 	}
 
 	if mnemos["timeout"] != int64(30) {
@@ -435,13 +437,8 @@ timeout = 30
 		t.Errorf("command not updated: %v", mnemos["command"])
 	}
 
-	// Env should be replaced (only MNEMOS_PROJECT_ID)
-	env := mnemos["env"].(map[string]interface{})
-	if env["MNEMOS_PROJECT_ID"] != "new-project" {
-		t.Error("MNEMOS_PROJECT_ID not updated")
-	}
-	if _, ok := env["CUSTOM_VAR"]; ok {
-		t.Error("CUSTOM_VAR should be removed with --force")
+	if _, ok := mnemos["env"]; ok {
+		t.Error("env should be removed with --force")
 	}
 
 	// Timeout should be removed
@@ -594,7 +591,6 @@ func TestMergeCodexTOML_SkipWhenMatches(t *testing.T) {
 	existing := `[mcp_servers.mnemos]
 command = "/usr/local/bin/mnemos"
 args = ["serve"]
-env = { "MNEMOS_PROJECT_ID" = "test-project" }
 `
 	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
@@ -614,6 +610,138 @@ env = { "MNEMOS_PROJECT_ID" = "test-project" }
 	data, _ := os.ReadFile(configPath)
 	if string(data) != existing {
 		t.Error("file was modified when it should have been skipped")
+	}
+}
+
+func TestMergeCodexTOML_MigratesInlineProjectEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	existing := `[mcp_servers.mnemos]
+command = "/usr/local/bin/mnemos"
+args = ["serve"]
+env = { "MNEMOS_PROJECT_ID" = "test-project", "CUSTOM_VAR" = "keep" }
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
+		t.Fatalf("failed to write initial config: %v", err)
+	}
+
+	changed, err := MergeCodexTOML(configPath, "/usr/local/bin/mnemos", "test-project", false)
+	if err != nil {
+		t.Fatalf("MergeCodexTOML failed: %v", err)
+	}
+	if !changed {
+		t.Error("expected changed=true when migrating project env")
+	}
+
+	data, _ := os.ReadFile(configPath)
+	content := string(data)
+	if strings.Contains(content, "MNEMOS_PROJECT") {
+		t.Fatalf("project env was not removed:\n%s", content)
+	}
+	if !strings.Contains(content, `"CUSTOM_VAR" = "keep"`) {
+		t.Fatalf("custom env was not preserved:\n%s", content)
+	}
+}
+
+func TestMergeCodexTOML_MigratesNestedProjectEnvTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	existing := `[mcp_servers.mnemos]
+command = "mnemos"
+args = ["serve"]
+
+[mcp_servers.mnemos.env]
+MNEMOS_PROJECT_ID = "hms"
+CUSTOM_VAR = "keep"
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
+		t.Fatalf("failed to write initial config: %v", err)
+	}
+
+	changed, err := MergeCodexTOML(configPath, "mnemos", "ignored", false)
+	if err != nil {
+		t.Fatalf("MergeCodexTOML failed: %v", err)
+	}
+	if !changed {
+		t.Error("expected changed=true when migrating nested project env table")
+	}
+
+	data, _ := os.ReadFile(configPath)
+	content := string(data)
+	if strings.Contains(content, "MNEMOS_PROJECT") {
+		t.Fatalf("project env was not removed:\n%s", content)
+	}
+	if !strings.Contains(content, "[mcp_servers.mnemos.env]") || !strings.Contains(content, `CUSTOM_VAR = "keep"`) {
+		t.Fatalf("custom nested env table was not preserved:\n%s", content)
+	}
+}
+
+func TestMergeCodexTOML_RemovesEmptyNestedProjectEnvTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	existing := `[mcp_servers.mnemos]
+command = "mnemos"
+args = ["serve"]
+
+[mcp_servers.mnemos.env]
+MNEMOS_PROJECT_ID = "hms"
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
+		t.Fatalf("failed to write initial config: %v", err)
+	}
+
+	changed, err := MergeCodexTOML(configPath, "mnemos", "ignored", false)
+	if err != nil {
+		t.Fatalf("MergeCodexTOML failed: %v", err)
+	}
+	if !changed {
+		t.Error("expected changed=true when removing nested project env table")
+	}
+
+	data, _ := os.ReadFile(configPath)
+	content := string(data)
+	if strings.Contains(content, "[mcp_servers.mnemos.env]") || strings.Contains(content, "MNEMOS_PROJECT") {
+		t.Fatalf("project-only env table was not removed:\n%s", content)
+	}
+}
+
+func TestMergeCodexTOML_ForceRemovesNestedEnvTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	existing := `[mcp_servers.mnemos]
+command = "mnemos"
+args = ["serve"]
+
+[mcp_servers.mnemos.env]
+MNEMOS_PROJECT_ID = "hms"
+CUSTOM_VAR = "drop-on-force"
+
+[mcp_servers.other]
+command = "other"
+`
+	if err := os.WriteFile(configPath, []byte(existing), 0o600); err != nil {
+		t.Fatalf("failed to write initial config: %v", err)
+	}
+
+	changed, err := MergeCodexTOML(configPath, "mnemos", "ignored", true)
+	if err != nil {
+		t.Fatalf("MergeCodexTOML failed: %v", err)
+	}
+	if !changed {
+		t.Error("expected changed=true with force")
+	}
+
+	data, _ := os.ReadFile(configPath)
+	content := string(data)
+	if strings.Contains(content, "[mcp_servers.mnemos.env]") || strings.Contains(content, "CUSTOM_VAR") {
+		t.Fatalf("nested env table was not removed with force:\n%s", content)
+	}
+	if !strings.Contains(content, "[mcp_servers.other]") {
+		t.Fatalf("unrelated section was not preserved:\n%s", content)
 	}
 }
 

@@ -192,14 +192,8 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 			return fmt.Errorf("resolve home dir: %w", err)
 		}
 
-		// Derive project ID
-		projectID, err := setup.DeriveProjectID(projectIDOverride)
-		if err != nil {
-			return fmt.Errorf("derive project ID: %w", err)
-		}
-
 		configPath := filepath.Join(home, ".codex", "config.toml")
-		changed, err := setup.MergeCodexTOML(configPath, binPath, projectID, force)
+		changed, err := setup.MergeCodexTOML(configPath, binPath, projectIDOverride, force)
 		if err != nil {
 			return fmt.Errorf("merge codex config: %w", err)
 		}
@@ -213,7 +207,7 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 		// For skip detection, we'd need MergeCodexTOML to return a different signal
 		// For now, always show success message
 		fmt.Printf("✓ Configured mnemos MCP server in %s\n", configPath)
-		fmt.Printf("  Project ID: %s\n", projectID)
+		fmt.Println("  Project scope: detected at runtime from each workspace")
 		fmt.Printf("  Command: %s serve\n", binPath)
 		fmt.Println()
 		fmt.Println("  Restart Codex CLI and VSCode extension to activate.")

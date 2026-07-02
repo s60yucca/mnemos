@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -157,6 +158,50 @@ func TestDaemon_StopWithinTimeout(t *testing.T) {
 	case <-time.After(6 * time.Second):
 		t.Error("daemon did not stop within 5 seconds")
 	}
+}
+
+func TestDaemon_StartOnlyOneLeaderPerDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("autopilot daemon leadership lock is implemented on Unix platforms")
+	}
+
+	env, w := newDaemonTestEnv(t)
+	dataDir := t.TempDir()
+	cfg := defaultCfg()
+	cfg.InitialDelay = 10 * time.Second
+	cfg.Interval = 10 * time.Second
+
+	leader := NewAutopilotDaemon(env.mnemos, cfg, dataDir, testLogger(), w)
+	leader.Start()
+	defer leader.Stop()
+
+	follower := NewAutopilotDaemon(env.mnemos, cfg, dataDir, testLogger(), w)
+	follower.Start()
+	select {
+	case <-follower.doneCh:
+	case <-time.After(time.Second):
+		t.Fatal("expected second daemon to exit without leadership")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		leader.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(6 * time.Second):
+		t.Fatal("leader did not stop")
+	}
+
+	nextLeader := NewAutopilotDaemon(env.mnemos, cfg, dataDir, testLogger(), w)
+	nextLeader.Start()
+	select {
+	case <-nextLeader.doneCh:
+		t.Fatal("expected daemon to acquire leadership after prior leader stopped")
+	default:
+	}
+	nextLeader.Stop()
 }
 
 // TestDaemon_DryRun: dryRun=true → no relations created, no report written, findings returned

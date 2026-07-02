@@ -49,11 +49,13 @@ type AutopilotDaemon struct {
 	writer    reportWriter
 	stopCh    chan struct{}
 	doneCh    chan struct{}
+	stopOnce  sync.Once
 
 	mu               sync.Mutex
 	lastRun          map[string]time.Time // per-project, in-process only
 	lastFindingCount int
 	nextRun          time.Time
+	leader           *daemonLeader
 }
 
 // NewAutopilotDaemon constructs an AutopilotDaemon. If writer is nil a no-op writer is used.
@@ -92,9 +94,24 @@ func (d *AutopilotDaemon) Start() {
 		close(d.doneCh)
 		return
 	}
+	leader, ok, err := acquireDaemonLeadership(d.dataDir)
+	if err != nil {
+		d.logger.Warn("autopilot daemon leadership unavailable", "err", err)
+		close(d.doneCh)
+		return
+	}
+	if !ok {
+		d.logger.Info("autopilot daemon already running in another mnemos serve process")
+		close(d.doneCh)
+		return
+	}
+	d.leader = leader
 
 	go func() {
-		defer close(d.doneCh)
+		defer func() {
+			d.leader.release()
+			close(d.doneCh)
+		}()
 
 		ctx := context.Background()
 
@@ -125,7 +142,7 @@ func (d *AutopilotDaemon) Start() {
 
 // Stop signals the daemon to stop and waits up to 5 seconds.
 func (d *AutopilotDaemon) Stop() {
-	close(d.stopCh)
+	d.stopOnce.Do(func() { close(d.stopCh) })
 	select {
 	case <-d.doneCh:
 	case <-time.After(5 * time.Second):

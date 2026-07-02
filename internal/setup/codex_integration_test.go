@@ -45,9 +45,8 @@ func TestCodexIntegration_FreshInstall(t *testing.T) {
 	if len(args) != 1 || args[0] != "serve" {
 		t.Errorf("args = %v", args)
 	}
-	env := mnemos["env"].(map[string]interface{})
-	if env["MNEMOS_PROJECT_ID"] != "my-project" {
-		t.Errorf("MNEMOS_PROJECT_ID = %v", env["MNEMOS_PROJECT_ID"])
+	if _, ok := mnemos["env"]; ok {
+		t.Errorf("env should not be written for global Codex config: %v", mnemos["env"])
 	}
 }
 
@@ -133,20 +132,16 @@ timeout = 60
 		t.Errorf("command not updated: %v", mnemos["command"])
 	}
 
-	env := mnemos["env"].(map[string]interface{})
-	if env["MNEMOS_PROJECT_ID"] != "new-project" {
-		t.Error("MNEMOS_PROJECT_ID not updated")
-	}
-	if _, ok := env["CUSTOM_VAR"]; ok {
-		t.Error("CUSTOM_VAR should be removed with --force")
+	if _, ok := mnemos["env"]; ok {
+		t.Error("env should be removed with --force")
 	}
 	if _, ok := mnemos["timeout"]; ok {
 		t.Error("timeout should be removed with --force")
 	}
 }
 
-// TestCodexIntegration_CustomProjectID tests --project flag.
-func TestCodexIntegration_CustomProjectID(t *testing.T) {
+// TestCodexIntegration_ProjectIDIgnoredForGlobalCodex tests that --project does not leak globally.
+func TestCodexIntegration_ProjectIDIgnoredForGlobalCodex(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
 
@@ -158,8 +153,8 @@ func TestCodexIntegration_CustomProjectID(t *testing.T) {
 	data, _ := os.ReadFile(configPath)
 	content := string(data)
 
-	if !strings.Contains(content, "custom-project-id") {
-		t.Error("custom project ID not in config")
+	if strings.Contains(content, "custom-project-id") || strings.Contains(content, "MNEMOS_PROJECT") {
+		t.Errorf("project ID should not be written to global Codex config:\n%s", content)
 	}
 }
 
@@ -336,6 +331,9 @@ env = { "MNEMOS_PROJECT_ID" = "old-project", "CUSTOM_DEBUG" = "true", "EXTRA_VAR
 	}
 	if env["EXTRA_VAR"] != "value" {
 		t.Error("EXTRA_VAR not preserved")
+	}
+	if _, ok := env["MNEMOS_PROJECT_ID"]; ok {
+		t.Error("MNEMOS_PROJECT_ID should be removed")
 	}
 }
 
