@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,4 +107,80 @@ func TestRenderDoctorProcessReport(t *testing.T) {
 	assert.Contains(t, rendered, "pid=10")
 	assert.Contains(t, rendered, "leader_running: true")
 	assert.Contains(t, rendered, "[WARN] sample warning")
+}
+
+func TestBuildDoctorDatabaseReportPassesForWritableDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "mnemos.db")
+	db, err := sqlitestore.Open(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	report := buildDoctorDatabaseReport(dbPath)
+
+	assert.Equal(t, CheckPass, report.Status)
+	assert.True(t, report.Exists)
+	assert.NotZero(t, report.SizeBytes)
+	require.NotEmpty(t, report.Findings)
+	assert.Equal(t, CheckPass, report.Findings[0].Severity)
+}
+
+func TestBuildDoctorDatabaseReportFailsForMissingDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "missing.db")
+
+	report := buildDoctorDatabaseReport(dbPath)
+
+	assert.Equal(t, CheckFail, report.Status)
+	assert.False(t, report.Exists)
+	require.NotEmpty(t, report.Findings)
+	assert.Contains(t, report.Findings[0].Message, "does not exist")
+	_, err := os.Stat(dbPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRenderDoctorReport(t *testing.T) {
+	report := DoctorReport{
+		Status:  CheckFail,
+		Summary: "blocking issue",
+		Version: "test",
+		DataDir: "/tmp/mnemos",
+		DBPath:  "/tmp/mnemos/mnemos.db",
+		Processes: DoctorProcessReport{
+			Status:     CheckWarn,
+			ServeCount: 2,
+		},
+		Database: DoctorDatabaseReport{
+			Status:    CheckFail,
+			Exists:    true,
+			SizeBytes: 123,
+		},
+		Findings: []DoctorFinding{{Severity: CheckFail, Message: "database read-only"}},
+	}
+	var out strings.Builder
+
+	renderDoctorReport(&out, report)
+
+	rendered := out.String()
+	assert.Contains(t, rendered, "Mnemos Doctor - FAIL")
+	assert.Contains(t, rendered, "Processes: WARN (2 mnemos serve)")
+	assert.Contains(t, rendered, "Database:  FAIL (123 bytes)")
+	assert.Contains(t, rendered, "[FAIL] database read-only")
+}
+
+func TestRenderDoctorDatabaseReport(t *testing.T) {
+	report := DoctorDatabaseReport{
+		Status:    CheckPass,
+		Path:      "/tmp/mnemos/mnemos.db",
+		Exists:    true,
+		SizeBytes: 456,
+		Findings:  []DoctorFinding{{Severity: CheckPass, Message: "writable"}},
+	}
+	var out strings.Builder
+
+	renderDoctorDatabaseReport(&out, report)
+
+	rendered := out.String()
+	assert.Contains(t, rendered, "Mnemos Doctor Database - PASS")
+	assert.Contains(t, rendered, "Path:   /tmp/mnemos/mnemos.db")
+	assert.Contains(t, rendered, "Size:   456 bytes")
+	assert.Contains(t, rendered, "[PASS] writable")
 }

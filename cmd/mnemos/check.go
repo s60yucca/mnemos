@@ -728,8 +728,8 @@ func addSignalActions(report *CheckReport) {
 		case "auto-inject":
 			message = "Run or verify the session-start hook and inspect auto-inject outcomes."
 		case "autopilot":
-			message = "Inspect persisted autopilot state and run one cycle if appropriate."
-			command = "mnemos autopilot status"
+			message = "Run doctor to inspect autopilot leadership, process state, and database writability."
+			command = "mnemos doctor all"
 		case "compile":
 			message = "Run or inspect autopilot compilation for projects with pending sources."
 			command = "mnemos autopilot run"

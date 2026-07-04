@@ -12,8 +12,21 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/autopilot"
 	"github.com/mnemos-dev/mnemos/internal/config"
+	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/spf13/cobra"
 )
+
+type DoctorReport struct {
+	Status      CheckStatus          `json:"status"`
+	Summary     string               `json:"summary"`
+	Version     string               `json:"version"`
+	DataDir     string               `json:"data_dir"`
+	DBPath      string               `json:"db_path"`
+	Processes   DoctorProcessReport  `json:"processes"`
+	Database    DoctorDatabaseReport `json:"database"`
+	Findings    []DoctorFinding      `json:"findings,omitempty"`
+	GeneratedAt string               `json:"generated_at"`
+}
 
 type DoctorProcessReport struct {
 	Status      CheckStatus     `json:"status"`
@@ -24,6 +37,15 @@ type DoctorProcessReport struct {
 	ServeCount  int             `json:"serve_count"`
 	Processes   []DoctorProcess `json:"processes"`
 	Autopilot   DoctorAutopilot `json:"autopilot"`
+	Findings    []DoctorFinding `json:"findings,omitempty"`
+	GeneratedAt string          `json:"generated_at"`
+}
+
+type DoctorDatabaseReport struct {
+	Status      CheckStatus     `json:"status"`
+	Path        string          `json:"path"`
+	Exists      bool            `json:"exists"`
+	SizeBytes   int64           `json:"size_bytes,omitempty"`
 	Findings    []DoctorFinding `json:"findings,omitempty"`
 	GeneratedAt string          `json:"generated_at"`
 }
@@ -54,7 +76,52 @@ func newDoctorCmd(cfg *config.Config, buildVersion string) *cobra.Command {
 		Use:   "doctor",
 		Short: "Diagnose Mnemos runtime state",
 	}
+	cmd.AddCommand(newDoctorAllCmd(cfg, buildVersion))
+	cmd.AddCommand(newDoctorDatabaseCmd(cfg))
 	cmd.AddCommand(newDoctorProcessesCmd(cfg, buildVersion))
+	return cmd
+}
+
+func newDoctorAllCmd(cfg *config.Config, buildVersion string) *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "all",
+		Short: "Inspect Mnemos processes, autopilot leadership, and database writability",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			report, err := buildDoctorReport(cfg, buildVersion)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			renderDoctorReport(cmd.OutOrStdout(), report)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
+	return cmd
+}
+
+func newDoctorDatabaseCmd(cfg *config.Config) *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "database",
+		Short: "Inspect Mnemos database existence and writability",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			report := buildDoctorDatabaseReport(cfg.DBPath())
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			renderDoctorDatabaseReport(cmd.OutOrStdout(), report)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
 	return cmd
 }
 
@@ -79,6 +146,34 @@ func newDoctorProcessesCmd(cfg *config.Config, buildVersion string) *cobra.Comma
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
 	return cmd
+}
+
+func buildDoctorReport(cfg *config.Config, buildVersion string) (DoctorReport, error) {
+	processes, err := buildDoctorProcessReport(cfg, buildVersion)
+	if err != nil {
+		return DoctorReport{}, err
+	}
+	database := buildDoctorDatabaseReport(cfg.DBPath())
+	findings := append([]DoctorFinding{}, processes.Findings...)
+	findings = append(findings, database.Findings...)
+	status := aggregateDoctorStatus(findings)
+	summary := "Mnemos runtime and database look healthy."
+	if status == CheckWarn {
+		summary = "Mnemos is usable, but doctor found degraded runtime or database signals."
+	} else if status == CheckFail {
+		summary = "Mnemos has a blocking runtime or database issue."
+	}
+	return DoctorReport{
+		Status:      status,
+		Summary:     summary,
+		Version:     buildVersion,
+		DataDir:     cfg.DataDir,
+		DBPath:      cfg.DBPath(),
+		Processes:   processes,
+		Database:    database,
+		Findings:    findings,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func buildDoctorProcessReport(cfg *config.Config, buildVersion string) (DoctorProcessReport, error) {
@@ -116,6 +211,64 @@ func buildDoctorProcessReport(cfg *config.Config, buildVersion string) (DoctorPr
 		Findings:    findings,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func buildDoctorDatabaseReport(dbPath string) DoctorDatabaseReport {
+	report := DoctorDatabaseReport{
+		Status:      CheckPass,
+		Path:        dbPath,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		report.Status = CheckFail
+		if os.IsNotExist(err) {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Database file does not exist."})
+		} else {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Database stat failed: " + err.Error()})
+		}
+		return report
+	}
+	report.Exists = true
+	report.SizeBytes = info.Size()
+	if err := probeDatabaseWritable(dbPath); err != nil {
+		report.Status = CheckFail
+		report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Database writable probe failed: " + err.Error()})
+		return report
+	}
+	report.Findings = append(report.Findings, DoctorFinding{Severity: CheckPass, Message: "Database accepts a rolled-back write transaction."})
+	return report
+}
+
+func probeDatabaseWritable(dbPath string) error {
+	db, err := sqlitestore.OpenExistingWritable(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	tableName := fmt.Sprintf("mnemos_doctor_write_probe_%d", time.Now().UTC().UnixNano())
+	if _, err := tx.Exec(`CREATE TABLE ` + tableName + ` (id INTEGER PRIMARY KEY, checked_at TEXT NOT NULL)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO `+tableName+` (checked_at) VALUES (?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func aggregateDoctorStatus(findings []DoctorFinding) CheckStatus {
+	status := CheckPass
+	for _, finding := range findings {
+		if statusRank(finding.Severity) > statusRank(status) {
+			status = finding.Severity
+		}
+	}
+	return status
 }
 
 func listMnemosServeProcesses() ([]DoctorProcess, error) {
@@ -236,6 +389,38 @@ func diagnoseProcesses(processes []DoctorProcess, autopilotInfo DoctorAutopilot)
 		})
 	}
 	return findings
+}
+
+func renderDoctorReport(w interface{ Write([]byte) (int, error) }, report DoctorReport) {
+	fmt.Fprintf(w, "Mnemos Doctor - %s\n%s\n\n", report.Status, report.Summary)
+	fmt.Fprintf(w, "Version:  %s\n", report.Version)
+	fmt.Fprintf(w, "Data dir: %s\n", report.DataDir)
+	fmt.Fprintf(w, "DB path:  %s\n\n", report.DBPath)
+	fmt.Fprintf(w, "Processes: %s (%d mnemos serve)\n", report.Processes.Status, report.Processes.ServeCount)
+	fmt.Fprintf(w, "Database:  %s", report.Database.Status)
+	if report.Database.Exists {
+		fmt.Fprintf(w, " (%d bytes)", report.Database.SizeBytes)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Findings:")
+	for _, finding := range report.Findings {
+		fmt.Fprintf(w, "  [%s] %s\n", finding.Severity, finding.Message)
+	}
+}
+
+func renderDoctorDatabaseReport(w interface{ Write([]byte) (int, error) }, report DoctorDatabaseReport) {
+	fmt.Fprintf(w, "Mnemos Doctor Database - %s\n", report.Status)
+	fmt.Fprintf(w, "Path:   %s\n", report.Path)
+	fmt.Fprintf(w, "Exists: %t\n", report.Exists)
+	if report.Exists {
+		fmt.Fprintf(w, "Size:   %d bytes\n", report.SizeBytes)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Findings:")
+	for _, finding := range report.Findings {
+		fmt.Fprintf(w, "  [%s] %s\n", finding.Severity, finding.Message)
+	}
 }
 
 func renderDoctorProcessReport(w interface{ Write([]byte) (int, error) }, report DoctorProcessReport) {

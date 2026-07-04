@@ -22,6 +22,7 @@ type EvidencePack struct {
 	Version       string                   `json:"version"`
 	ProjectID     string                   `json:"project_id,omitempty"`
 	Check         CheckReport              `json:"check"`
+	Doctor        *DoctorReport            `json:"doctor,omitempty"`
 	FeatureHealth map[string]CheckStatus   `json:"feature_health"`
 	Eval          EvidenceEvalSummary      `json:"eval"`
 	Benchmark     EvidenceBenchmarkSummary `json:"benchmark"`
@@ -116,15 +117,21 @@ func buildEvidencePack(ctx context.Context, cfg *config.Config, mnemos *core.Mne
 	if err != nil {
 		return nil, err
 	}
+	doctor, doctorErr := buildDoctorReport(cfg, buildVersion)
 
 	pack := &EvidencePack{
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Version:       buildVersion,
 		ProjectID:     project,
 		Check:         check,
+		Doctor:        &doctor,
 		FeatureHealth: featureHealth,
 		Eval:          eval,
 		Benchmark:     bench,
+	}
+	if doctorErr != nil {
+		pack.Doctor = nil
+		pack.Notes = append(pack.Notes, "Doctor snapshot unavailable: "+doctorErr.Error())
 	}
 	if bench.OFF == 0 {
 		pack.Notes = append(pack.Notes, "Benchmark evidence has no OFF sessions yet; collect an OFF cohort before public launch.")
@@ -233,6 +240,9 @@ func renderEvidenceMarkdown(pack *EvidencePack) string {
 		fmt.Fprintf(&b, "- Project: `%s`\n", pack.ProjectID)
 	}
 	fmt.Fprintf(&b, "- Check: **%s** — %s\n", pack.Check.Status, pack.Check.Summary)
+	if pack.Doctor != nil {
+		fmt.Fprintf(&b, "- Doctor: **%s** — %s\n", pack.Doctor.Status, pack.Doctor.Summary)
+	}
 	fmt.Fprintf(&b, "- Eval score: **%.2f** (%d active, %.0f%% duplicate rate)\n", pack.Eval.Score, pack.Eval.Active, pack.Eval.DuplicateRate*100)
 	fmt.Fprintf(&b, "- Benchmark: `%d ON / %d OFF / %d total`\n\n", pack.Benchmark.ON, pack.Benchmark.OFF, pack.Benchmark.Total)
 
