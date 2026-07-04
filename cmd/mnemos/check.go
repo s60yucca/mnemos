@@ -147,6 +147,7 @@ func newCheckCmd(cfg *config.Config, mnemos *core.Mnemos, buildVersion string) *
 
 func runCheck(ctx context.Context, cfg *config.Config, mnemos *core.Mnemos, buildVersion string, opts checkOptions) CheckReport {
 	report := CheckReport{ProjectID: opts.project}
+	report.Signals = append(report.Signals, databaseSignal(cfg.DBPath()))
 	memories, stats, err := loadCheckMemories(ctx, mnemos, opts.project)
 	if err != nil {
 		report.Signals = append(report.Signals, failedSignal("memory quality", true, projectScope(opts.project), err))
@@ -187,6 +188,28 @@ func runCheck(ctx context.Context, cfg *config.Config, mnemos *core.Mnemos, buil
 	addSignalActions(&report)
 	finalizeCheckReport(&report, opts.launch)
 	return report
+}
+
+func databaseSignal(dbPath string) CheckSignal {
+	report := buildDoctorDatabaseReport(dbPath)
+	value := "writable"
+	if !report.Exists {
+		value = "missing"
+	} else if report.Status != CheckPass {
+		value = "not writable"
+	}
+	explanation := "Database accepts a rolled-back write transaction."
+	if len(report.Findings) > 0 {
+		explanation = report.Findings[0].Message
+	}
+	return CheckSignal{
+		Name:        "database",
+		Status:      report.Status,
+		Critical:    true,
+		Scope:       "global",
+		Value:       value,
+		Explanation: explanation,
+	}
 }
 
 func loadCheckMemories(ctx context.Context, mnemos *core.Mnemos, project string) ([]*domain.Memory, *storage.Stats, error) {
@@ -722,6 +745,9 @@ func addSignalActions(report *CheckReport) {
 		case "memory quality":
 			message = "Review low-quality, stale, or duplicate memories with `mnemos eval`."
 			command = "mnemos eval"
+		case "database":
+			message = "Run doctor database to inspect DB path, permissions, and writable probe."
+			command = "mnemos doctor database"
 		case "feature health":
 			message = "Inspect feature denominators and recent activity with `mnemos health`."
 			command = "mnemos health"
@@ -742,6 +768,9 @@ func addSignalActions(report *CheckReport) {
 		case "generated noise":
 			message = "Run with --fix to apply safe cleanup."
 			command = "mnemos check --fix"
+		case "telemetry path":
+			message = "Run doctor logs to inspect feature log path and writability."
+			command = "mnemos doctor logs"
 		}
 		if message != "" && !existing[message] && (command == "" || !existingCommands[command]) {
 			report.ActionItems = append(report.ActionItems, ActionItem{Severity: signal.Status, Message: message, Command: command})

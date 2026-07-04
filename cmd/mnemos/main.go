@@ -62,6 +62,13 @@ func main() {
 		}
 		return
 	}
+	if isDoctorInvocation(os.Args[1:]) {
+		if err := runDoctorOnly(cfg, resolveVersion()); err != nil {
+			fmt.Fprintln(os.Stderr, "doctor error:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Ensure data dir exists
 	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
@@ -184,6 +191,26 @@ func selectedCommand(args []string) string {
 
 func isCheckInvocation(args []string) bool {
 	return selectedCommand(args) == "check"
+}
+
+func isDoctorInvocation(args []string) bool {
+	return selectedCommand(args) == "doctor"
+}
+
+func runDoctorOnly(cfg *config.Config, buildVersion string) error {
+	root := &cobra.Command{Use: "mnemos", SilenceUsage: true, SilenceErrors: true}
+	root.AddCommand(newDoctorCmd(cfg, buildVersion))
+	root.SetArgs(doctorCommandArgs(os.Args[1:]))
+	return root.Execute()
+}
+
+func doctorCommandArgs(args []string) []string {
+	for i, arg := range args {
+		if arg == "doctor" {
+			return args[i:]
+		}
+	}
+	return args
 }
 
 func runReadOnlyCheck(cfg *config.Config, logger *slog.Logger, buildVersion string) error {

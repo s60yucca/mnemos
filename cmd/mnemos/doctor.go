@@ -24,6 +24,7 @@ type DoctorReport struct {
 	DBPath      string               `json:"db_path"`
 	Processes   DoctorProcessReport  `json:"processes"`
 	Database    DoctorDatabaseReport `json:"database"`
+	Logs        DoctorLogReport      `json:"logs"`
 	Findings    []DoctorFinding      `json:"findings,omitempty"`
 	GeneratedAt string               `json:"generated_at"`
 }
@@ -48,6 +49,20 @@ type DoctorDatabaseReport struct {
 	SizeBytes   int64           `json:"size_bytes,omitempty"`
 	Findings    []DoctorFinding `json:"findings,omitempty"`
 	GeneratedAt string          `json:"generated_at"`
+}
+
+type DoctorLogReport struct {
+	Status         CheckStatus     `json:"status"`
+	ConfiguredPath string          `json:"configured_path"`
+	LegacyPath     string          `json:"legacy_path,omitempty"`
+	ActivePath     string          `json:"active_path"`
+	Exists         bool            `json:"exists"`
+	SizeBytes      int64           `json:"size_bytes,omitempty"`
+	LastWrite      string          `json:"last_write,omitempty"`
+	DirWritable    bool            `json:"dir_writable"`
+	LegacyFallback bool            `json:"legacy_fallback"`
+	Findings       []DoctorFinding `json:"findings,omitempty"`
+	GeneratedAt    string          `json:"generated_at"`
 }
 
 type DoctorProcess struct {
@@ -78,6 +93,7 @@ func newDoctorCmd(cfg *config.Config, buildVersion string) *cobra.Command {
 	}
 	cmd.AddCommand(newDoctorAllCmd(cfg, buildVersion))
 	cmd.AddCommand(newDoctorDatabaseCmd(cfg))
+	cmd.AddCommand(newDoctorLogsCmd(cfg))
 	cmd.AddCommand(newDoctorProcessesCmd(cfg, buildVersion))
 	return cmd
 }
@@ -125,6 +141,26 @@ func newDoctorDatabaseCmd(cfg *config.Config) *cobra.Command {
 	return cmd
 }
 
+func newDoctorLogsCmd(cfg *config.Config) *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "logs",
+		Short: "Inspect Mnemos feature log path, writability, and freshness",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			report := buildDoctorLogReport(cfg.DataDir)
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			renderDoctorLogReport(cmd.OutOrStdout(), report)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
+	return cmd
+}
+
 func newDoctorProcessesCmd(cfg *config.Config, buildVersion string) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -149,19 +185,18 @@ func newDoctorProcessesCmd(cfg *config.Config, buildVersion string) *cobra.Comma
 }
 
 func buildDoctorReport(cfg *config.Config, buildVersion string) (DoctorReport, error) {
-	processes, err := buildDoctorProcessReport(cfg, buildVersion)
-	if err != nil {
-		return DoctorReport{}, err
-	}
+	processes := buildDoctorProcessReportTolerant(cfg, buildVersion)
 	database := buildDoctorDatabaseReport(cfg.DBPath())
+	logs := buildDoctorLogReport(cfg.DataDir)
 	findings := append([]DoctorFinding{}, processes.Findings...)
 	findings = append(findings, database.Findings...)
+	findings = append(findings, logs.Findings...)
 	status := aggregateDoctorStatus(findings)
-	summary := "Mnemos runtime and database look healthy."
+	summary := "Mnemos runtime, database, and logs look healthy."
 	if status == CheckWarn {
-		summary = "Mnemos is usable, but doctor found degraded runtime or database signals."
+		summary = "Mnemos is usable, but doctor found degraded runtime, database, or log signals."
 	} else if status == CheckFail {
-		summary = "Mnemos has a blocking runtime or database issue."
+		summary = "Mnemos has a blocking runtime, database, or log issue."
 	}
 	return DoctorReport{
 		Status:      status,
@@ -171,9 +206,31 @@ func buildDoctorReport(cfg *config.Config, buildVersion string) (DoctorReport, e
 		DBPath:      cfg.DBPath(),
 		Processes:   processes,
 		Database:    database,
+		Logs:        logs,
 		Findings:    findings,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func buildDoctorProcessReportTolerant(cfg *config.Config, buildVersion string) DoctorProcessReport {
+	report, err := buildDoctorProcessReport(cfg, buildVersion)
+	if err == nil {
+		return report
+	}
+	finding := DoctorFinding{
+		Severity: CheckUnknown,
+		Message:  "Process inspection unavailable: " + err.Error(),
+	}
+	return DoctorProcessReport{
+		Status:      CheckUnknown,
+		Summary:     "Mnemos process state could not be inspected in this environment.",
+		Version:     buildVersion,
+		DataDir:     cfg.DataDir,
+		DBPath:      cfg.DBPath(),
+		Autopilot:   readDoctorAutopilot(cfg.DataDir, nil),
+		Findings:    []DoctorFinding{finding},
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+	}
 }
 
 func buildDoctorProcessReport(cfg *config.Config, buildVersion string) (DoctorProcessReport, error) {
@@ -238,6 +295,61 @@ func buildDoctorDatabaseReport(dbPath string) DoctorDatabaseReport {
 	}
 	report.Findings = append(report.Findings, DoctorFinding{Severity: CheckPass, Message: "Database accepts a rolled-back write transaction."})
 	return report
+}
+
+func buildDoctorLogReport(dataDir string) DoctorLogReport {
+	configured := filepath.Join(dataDir, "logs", "features.log")
+	home, _ := os.UserHomeDir()
+	legacy := filepath.Join(home, ".mnemos", "logs", "features.log")
+	activePath, _, legacyFallback := resolveFeatureLog(dataDir)
+	report := DoctorLogReport{
+		Status:         CheckPass,
+		ConfiguredPath: configured,
+		LegacyPath:     legacy,
+		ActivePath:     activePath,
+		LegacyFallback: legacyFallback,
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+	}
+	if legacyFallback {
+		report.Findings = append(report.Findings, DoctorFinding{Severity: CheckWarn, Message: "Configured feature log is missing and Mnemos is reading legacy telemetry."})
+	}
+	logDir := filepath.Dir(configured)
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Feature log directory cannot be created: " + err.Error()})
+	} else if err := probeDirectoryWritable(logDir); err != nil {
+		report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Feature log directory is not writable: " + err.Error()})
+	} else {
+		report.DirWritable = true
+		report.Findings = append(report.Findings, DoctorFinding{Severity: CheckPass, Message: "Feature log directory is writable."})
+	}
+	info, err := os.Stat(activePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckWarn, Message: "Feature log does not exist yet."})
+		} else {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckFail, Message: "Feature log stat failed: " + err.Error()})
+		}
+	} else {
+		report.Exists = true
+		report.SizeBytes = info.Size()
+		report.LastWrite = info.ModTime().UTC().Format(time.RFC3339)
+		age := time.Since(info.ModTime())
+		if age > 24*time.Hour {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckWarn, Message: fmt.Sprintf("Feature log has not been written for %s.", age.Round(time.Hour))})
+		} else {
+			report.Findings = append(report.Findings, DoctorFinding{Severity: CheckPass, Message: fmt.Sprintf("Feature log was written %s ago.", age.Round(time.Minute))})
+		}
+	}
+	report.Status = aggregateDoctorStatus(report.Findings)
+	return report
+}
+
+func probeDirectoryWritable(dir string) error {
+	name := filepath.Join(dir, fmt.Sprintf(".mnemos-doctor-log-probe-%d", time.Now().UTC().UnixNano()))
+	if err := os.WriteFile(name, []byte("ok\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Remove(name)
 }
 
 func probeDatabaseWritable(dbPath string) error {
@@ -402,6 +514,11 @@ func renderDoctorReport(w interface{ Write([]byte) (int, error) }, report Doctor
 		fmt.Fprintf(w, " (%d bytes)", report.Database.SizeBytes)
 	}
 	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Logs:      %s", report.Logs.Status)
+	if report.Logs.Exists {
+		fmt.Fprintf(w, " (%d bytes)", report.Logs.SizeBytes)
+	}
+	fmt.Fprintln(w)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Findings:")
 	for _, finding := range report.Findings {
@@ -415,6 +532,29 @@ func renderDoctorDatabaseReport(w interface{ Write([]byte) (int, error) }, repor
 	fmt.Fprintf(w, "Exists: %t\n", report.Exists)
 	if report.Exists {
 		fmt.Fprintf(w, "Size:   %d bytes\n", report.SizeBytes)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Findings:")
+	for _, finding := range report.Findings {
+		fmt.Fprintf(w, "  [%s] %s\n", finding.Severity, finding.Message)
+	}
+}
+
+func renderDoctorLogReport(w interface{ Write([]byte) (int, error) }, report DoctorLogReport) {
+	fmt.Fprintf(w, "Mnemos Doctor Logs - %s\n", report.Status)
+	fmt.Fprintf(w, "Configured: %s\n", report.ConfiguredPath)
+	fmt.Fprintf(w, "Active:     %s\n", report.ActivePath)
+	if report.LegacyPath != "" {
+		fmt.Fprintf(w, "Legacy:     %s\n", report.LegacyPath)
+	}
+	fmt.Fprintf(w, "Exists:     %t\n", report.Exists)
+	fmt.Fprintf(w, "Dir writable: %t\n", report.DirWritable)
+	if report.Exists {
+		fmt.Fprintf(w, "Size:       %d bytes\n", report.SizeBytes)
+		fmt.Fprintf(w, "Last write: %s\n", report.LastWrite)
+	}
+	if report.LegacyFallback {
+		fmt.Fprintln(w, "Legacy fallback: true")
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Findings:")

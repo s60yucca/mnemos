@@ -153,6 +153,11 @@ func TestRenderDoctorReport(t *testing.T) {
 			Exists:    true,
 			SizeBytes: 123,
 		},
+		Logs: DoctorLogReport{
+			Status:    CheckPass,
+			Exists:    true,
+			SizeBytes: 789,
+		},
 		Findings: []DoctorFinding{{Severity: CheckFail, Message: "database read-only"}},
 	}
 	var out strings.Builder
@@ -163,6 +168,7 @@ func TestRenderDoctorReport(t *testing.T) {
 	assert.Contains(t, rendered, "Mnemos Doctor - FAIL")
 	assert.Contains(t, rendered, "Processes: WARN (2 mnemos serve)")
 	assert.Contains(t, rendered, "Database:  FAIL (123 bytes)")
+	assert.Contains(t, rendered, "Logs:      PASS (789 bytes)")
 	assert.Contains(t, rendered, "[FAIL] database read-only")
 }
 
@@ -183,4 +189,43 @@ func TestRenderDoctorDatabaseReport(t *testing.T) {
 	assert.Contains(t, rendered, "Path:   /tmp/mnemos/mnemos.db")
 	assert.Contains(t, rendered, "Size:   456 bytes")
 	assert.Contains(t, rendered, "[PASS] writable")
+}
+
+func TestBuildDoctorLogReportPassesForWritableRecentLog(t *testing.T) {
+	dataDir := t.TempDir()
+	logDir := filepath.Join(dataDir, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "features.log"), []byte("feature=store_call\n"), 0o600))
+
+	report := buildDoctorLogReport(dataDir)
+
+	assert.Equal(t, CheckPass, report.Status)
+	assert.True(t, report.Exists)
+	assert.True(t, report.DirWritable)
+	assert.False(t, report.LegacyFallback)
+	assert.NotEmpty(t, report.LastWrite)
+}
+
+func TestRenderDoctorLogReport(t *testing.T) {
+	report := DoctorLogReport{
+		Status:         CheckWarn,
+		ConfiguredPath: "/tmp/mnemos/logs/features.log",
+		ActivePath:     "/tmp/.mnemos/logs/features.log",
+		LegacyPath:     "/tmp/.mnemos/logs/features.log",
+		Exists:         true,
+		SizeBytes:      99,
+		LastWrite:      "2026-07-05T00:00:00Z",
+		DirWritable:    true,
+		LegacyFallback: true,
+		Findings:       []DoctorFinding{{Severity: CheckWarn, Message: "legacy fallback"}},
+	}
+	var out strings.Builder
+
+	renderDoctorLogReport(&out, report)
+
+	rendered := out.String()
+	assert.Contains(t, rendered, "Mnemos Doctor Logs - WARN")
+	assert.Contains(t, rendered, "Configured: /tmp/mnemos/logs/features.log")
+	assert.Contains(t, rendered, "Legacy fallback: true")
+	assert.Contains(t, rendered, "[WARN] legacy fallback")
 }

@@ -126,6 +126,26 @@ func TestVersionFromExecutablePathResolvesHomebrewSymlink(t *testing.T) {
 	assert.Equal(t, "1.1.16", versionFromExecutablePath(link))
 }
 
+func TestDatabaseSignalFailsForMissingDatabase(t *testing.T) {
+	signal := databaseSignal(filepath.Join(t.TempDir(), "missing.db"))
+
+	assert.Equal(t, CheckFail, signal.Status)
+	assert.Equal(t, "database", signal.Name)
+	assert.Equal(t, "missing", signal.Value)
+	assert.Contains(t, signal.Explanation, "does not exist")
+}
+
+func TestAddSignalActionsRoutesDatabaseToDoctor(t *testing.T) {
+	report := &CheckReport{Signals: []CheckSignal{{
+		Name: "database", Status: CheckFail, Critical: true,
+	}}}
+
+	addSignalActions(report)
+
+	require.Len(t, report.ActionItems, 1)
+	assert.Equal(t, "mnemos doctor database", report.ActionItems[0].Command)
+}
+
 func TestApplyCheckFixesArchivesOnlyVerifiedReport(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "mnemos.db")
 	db, err := sqlitestore.Open(dbPath)
