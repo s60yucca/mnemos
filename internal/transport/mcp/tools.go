@@ -158,16 +158,6 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		"project_id": storeReq.ProjectID,
 	})
 
-	// Task 10: summarize - fires when auto-summarization occurs
-	if result.Memory != nil && result.Memory.Summary != "" && storeReq.Summary == "" {
-		observe.Feature("summarize", map[string]any{
-			"memory_id":  result.Memory.ID,
-			"method":     "auto",
-			"length":     len(result.Memory.Summary),
-			"project_id": storeReq.ProjectID,
-		})
-	}
-
 	// Task 11: file_link - fires when file paths are detected
 	if result.Memory != nil && result.Memory.Metadata != nil {
 		if relatedFiles, ok := result.Memory.Metadata["related_files"]; ok && relatedFiles != "" {
@@ -199,6 +189,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 	projectID := req.GetString("project_id", "")
 	limit := req.GetInt("limit", 10)
 	mode := req.GetString("mode", "hybrid")
+	s.observeQueryTopicShift(projectID, query, "search")
 
 	// Bench mode OFF: return empty results (simulates no search)
 	if s.currentBenchMode() == benchmark.BenchModeOff {
@@ -363,6 +354,7 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 	projectID := req.GetString("project_id", "")
 	maxTokens := req.GetInt("max_tokens", 4000)
 	includeRelations := req.GetBool("include_relations", false)
+	s.observeQueryTopicShift(projectID, query, "context")
 
 	// DEBUG: Log incoming parameters to diagnose empty context bug
 	fmt.Fprintf(os.Stderr, "[DEBUG] handleContext: query=%q project_id=%q max_tokens=%d include_relations=%v\n",
@@ -430,12 +422,6 @@ func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*
 	if err := s.mnemos.Maintain(ctx, projectID); err != nil {
 		return mcpError(err.Error()), nil
 	}
-
-	// Task 17: decay - fires on every maintenance operation
-	observe.Feature("decay", map[string]any{
-		"project_id": projectID,
-		"outcome":    "ok",
-	})
 
 	result := `{"status":"ok","message":"maintenance complete"}`
 

@@ -144,6 +144,8 @@ func main() {
 	rootCmd.AddCommand(newStatusCmd(cfg))
 	rootCmd.AddCommand(newBenchCmd(cfg.DataDir))
 	rootCmd.AddCommand(newEvalCmd(mnemos))
+	rootCmd.AddCommand(newEvidenceCmd(cfg, mnemos, resolveVersion()))
+	rootCmd.AddCommand(newDoctorCmd(cfg, resolveVersion()))
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
 		os.Exit(1)

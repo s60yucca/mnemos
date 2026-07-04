@@ -12,6 +12,8 @@ import (
 // errorSilenced tracks whether we've already emitted a write failure warning
 var errorSilenced atomic.Bool
 
+var defaultLogPath = getLogPath
+
 // Feature records a feature execution event to ~/.mnemos/logs/features.log.
 // Never returns an error; panics are recovered internally.
 // Completes in < 5ms under normal conditions.
@@ -114,18 +116,19 @@ func SetDataDir(dataDir string) {
 	if dataDir == "" {
 		return
 	}
-	getLogPath = func() string {
+	pathForDataDir := func() string {
 		return filepath.Join(dataDir, "logs", "features.log")
 	}
+	defaultLogPath = pathForDataDir
+	getLogPath = pathForDataDir
 }
 
 // SetLogPath overrides the path where Feature() writes events.
 // Call with empty string to restore the default (home-dir-based) path.
 // Intended for tests; not safe for concurrent use after Feature() has been called.
 func SetLogPath(path string) {
-	prev := getLogPath
 	if path == "" {
-		getLogPath = prev
+		getLogPath = defaultLogPath
 	} else {
 		getLogPath = func() string { return path }
 	}

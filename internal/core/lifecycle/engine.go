@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 )
 
@@ -121,6 +122,12 @@ func (e *Engine) RunDecay(ctx context.Context, projectID string) error {
 		archived = 0
 	}
 	e.logger.Info("decay run complete", "processed", len(memories), "archived", archived)
+	observe.Feature("decay", map[string]any{
+		"project_id": projectID,
+		"processed":  len(memories),
+		"archived":   archived,
+		"outcome":    "ok",
+	})
 	return nil
 }
 

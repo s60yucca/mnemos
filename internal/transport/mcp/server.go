@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,6 +19,8 @@ type Server struct {
 	mcpServer      *server.MCPServer
 	dataDir        string
 	sessionTracker *benchmark.SessionTracker
+	topicMu        sync.Mutex
+	activeTopics   map[string]string
 }
 
 // NewServer creates and configures the MCP server
@@ -36,6 +39,7 @@ func NewServer(mnemos *core.Mnemos, version string) *Server {
 		mnemos:         mnemos,
 		dataDir:        dataDir,
 		sessionTracker: sessionTracker,
+		activeTopics:   make(map[string]string),
 	}
 
 	s.mcpServer = server.NewMCPServer(

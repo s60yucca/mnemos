@@ -10,6 +10,7 @@ import (
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
 	"github.com/mnemos-dev/mnemos/internal/embedding"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	"github.com/mnemos-dev/mnemos/internal/util"
 )
@@ -135,6 +136,7 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 	// Auto-generate summary if caller didn't provide one
 	if req.Summary == "" {
 		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
+		emitSummarizeFeature(mem, "extractive")
 	}
 
 	// Extract and store related file paths for file-aware retrieval boost
@@ -168,6 +170,18 @@ func (m *Manager) Store(ctx context.Context, req *domain.StoreRequest) (*domain.
 
 	// 9. Return result
 	return &domain.StoreResult{Memory: mem, Created: true, QualityNote: qualityNote}, nil
+}
+
+func emitSummarizeFeature(mem *domain.Memory, method string) {
+	if mem == nil || mem.Summary == "" {
+		return
+	}
+	observe.Feature("summarize", map[string]any{
+		"memory_id":  mem.ID,
+		"method":     method,
+		"length":     len(mem.Summary),
+		"project_id": mem.ProjectID,
+	})
 }
 
 // Get retrieves a memory by ID and increments access count
@@ -224,6 +238,7 @@ func (m *Manager) Update(ctx context.Context, req *domain.UpdateRequest) (*domai
 		mem.Summary = *req.Summary
 	} else if contentChanged {
 		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
+		emitSummarizeFeature(mem, "extractive_update")
 	}
 	if req.Category != nil {
 		mem.Category = *req.Category
@@ -338,6 +353,7 @@ func (m *Manager) StoreWithoutGate(ctx context.Context, req *domain.StoreRequest
 	// Auto-generate summary if caller didn't provide one
 	if req.Summary == "" {
 		mem.Summary = ExtractSummary(mem.Content, mem.Type, 30)
+		emitSummarizeFeature(mem, "extractive")
 	}
 
 	// Extract and store related file paths for file-aware retrieval boost
@@ -450,6 +466,13 @@ func (m *Manager) fixCompact(req *domain.StoreRequest) {
 // req.Content is left unchanged.
 func (m *Manager) fixSummarize(req *domain.StoreRequest) {
 	req.Summary = first2Sentences(req.Content)
+	if req.Summary != "" {
+		observe.Feature("summarize", map[string]any{
+			"method":     "quality_gate",
+			"length":     len(req.Summary),
+			"project_id": req.ProjectID,
+		})
+	}
 }
 
 // fixDowngrade sets req.Type to short_term and appends the "auto-downgraded" tag.

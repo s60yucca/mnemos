@@ -1,11 +1,15 @@
 package mcp
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/benchmark"
 	core "github.com/mnemos-dev/mnemos/internal/core"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,4 +132,37 @@ func TestServerCreation_WithBenchMode(t *testing.T) {
 
 	// Cleanup
 	server.Shutdown()
+}
+
+func TestObserveQueryTopicShiftEmitsOnChangedTopic(t *testing.T) {
+	featuresLog := filepath.Join(t.TempDir(), "features.log")
+	observe.SetLogPath(featuresLog)
+	t.Cleanup(func() { observe.SetLogPath("") })
+
+	server := &Server{activeTopics: make(map[string]string)}
+	server.observeQueryTopicShift("proj1", "review jwt auth middleware", "search")
+	server.observeQueryTopicShift("proj1", "fix booking payment ledger", "context")
+
+	data, err := os.ReadFile(featuresLog)
+	require.NoError(t, err)
+	log := string(data)
+	require.True(t, strings.Contains(log, "\ttopic_shift\t"), log)
+	require.True(t, strings.Contains(log, "project_id=proj1"), log)
+	require.True(t, strings.Contains(log, "source=context"), log)
+}
+
+func TestObserveQueryTopicShiftDoesNotEmitForFirstTopic(t *testing.T) {
+	featuresLog := filepath.Join(t.TempDir(), "features.log")
+	observe.SetLogPath(featuresLog)
+	t.Cleanup(func() { observe.SetLogPath("") })
+
+	server := &Server{activeTopics: make(map[string]string)}
+	server.observeQueryTopicShift("proj1", "review jwt auth middleware", "search")
+
+	data, err := os.ReadFile(featuresLog)
+	if os.IsNotExist(err) {
+		return
+	}
+	require.NoError(t, err)
+	require.False(t, strings.Contains(string(data), "\ttopic_shift\t"))
 }

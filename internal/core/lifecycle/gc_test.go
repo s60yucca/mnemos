@@ -4,10 +4,13 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/domain"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/mnemos-dev/mnemos/internal/storage"
 	sqlitestore "github.com/mnemos-dev/mnemos/internal/storage/sqlite"
 	"github.com/mnemos-dev/mnemos/internal/util"
@@ -101,4 +104,33 @@ func TestRunGC_PurgesOldArchivedReports(t *testing.T) {
 
 	require.Equal(t, 1, countActive(t, store, domain.MemoryStatusActive), "active report preserved")
 	require.Equal(t, 3, countActive(t, store, domain.MemoryStatusArchived), "recent report + non-daemon + user memory preserved")
+}
+
+func TestRunDecayEmitsFeature(t *testing.T) {
+	featuresLog := filepath.Join(t.TempDir(), "features.log")
+	observe.SetLogPath(featuresLog)
+	t.Cleanup(func() { observe.SetLogPath("") })
+
+	store := newGCTestStore(t)
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	engine := NewEngine(store, 24*time.Hour, 30, 0.1, false, logger)
+
+	now := time.Now().UTC()
+	insertMem(t, store, &domain.Memory{
+		ID: "decay-1", Content: "real knowledge", Type: domain.MemoryTypeSemantic,
+		Category: "code", Source: "user", ProjectID: "p1",
+		Status: domain.MemoryStatusActive, CreatedAt: now, UpdatedAt: now,
+		LastAccessedAt: now, RelevanceScore: 1.0,
+	})
+
+	require.NoError(t, engine.RunDecay(ctx, "p1"))
+
+	data, err := os.ReadFile(featuresLog)
+	require.NoError(t, err)
+	log := string(data)
+	require.True(t, strings.Contains(log, "\tdecay\t"), log)
+	require.True(t, strings.Contains(log, "project_id=p1"), log)
+	require.True(t, strings.Contains(log, "processed=1"), log)
+	require.True(t, strings.Contains(log, "outcome=ok"), log)
 }
