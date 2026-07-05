@@ -69,10 +69,13 @@ func resolveSessionID(input *HookInput) string {
 }
 
 // resolveProjectID returns the project ID from input if present,
-// falls back to the base name of project_dir, or "unknown".
+// falls back to MNEMOS_PROJECT_ID, the base name of project_dir, or "unknown".
 func resolveProjectID(input *HookInput) string {
 	if input.ProjectID != "" {
 		return input.ProjectID
+	}
+	if projectID := os.Getenv("MNEMOS_PROJECT_ID"); projectID != "" {
+		return projectID
 	}
 	if projectDir := resolveProjectDir(input); projectDir != "" {
 		return filepath.Base(projectDir)

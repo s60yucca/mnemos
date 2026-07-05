@@ -72,9 +72,12 @@ Recommended behavior:
 
 - session open: call `mnemos_context`
 - before implementation: call `mnemos_search` if the task references a subsystem, feature, bug, or file area
+- before delegating to a Claude subagent: call `mnemos_context` in the main agent and include the relevant context or memory IDs in the Task prompt
 - session end or after major step: call `mnemos_store` once if there is a durable learning
 
 Use the template in [templates/claude/SYSTEM_PROMPT.md](../templates/claude/SYSTEM_PROMPT.md).
+
+Claude hooks run for the main session lifecycle. Treat subagents as separate workers that may not inherit hook-injected context or parent steering text.
 
 ## Kiro
 
@@ -103,7 +106,7 @@ Use these defaults first:
 - session-start context budget: `2000`
 - search limit: `5-8`
 - store only once per meaningful completed change
-- project scope: set `MNEMOS_PROJECT_ID` per workspace
+- project scope: set `MNEMOS_PROJECT_ID` per workspace, or pass `--project <id>` to commands; hooks and MCP server calls use `MNEMOS_PROJECT_ID` as the canonical runtime scope
 
 ## Phase Plan
 

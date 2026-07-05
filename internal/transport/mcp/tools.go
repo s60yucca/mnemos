@@ -102,7 +102,7 @@ func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		Content:   content,
 		Summary:   req.GetString("summary", ""),
 		Source:    req.GetString("source", ""),
-		ProjectID: req.GetString("project_id", ""),
+		ProjectID: projectIDOrDefault(req.GetString("project_id", "")),
 	}
 
 	if t := req.GetString("type", ""); t != "" {
@@ -186,7 +186,7 @@ func (s *Server) handleSearch(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return mcpError("query is required"), nil
 	}
 
-	projectID := req.GetString("project_id", "")
+	projectID := projectIDOrDefault(req.GetString("project_id", ""))
 	limit := req.GetInt("limit", 10)
 	mode := req.GetString("mode", "hybrid")
 	s.observeQueryTopicShift(projectID, query, "search")
@@ -351,7 +351,7 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcpError("query is required"), nil
 	}
 
-	projectID := req.GetString("project_id", "")
+	projectID := projectIDOrDefault(req.GetString("project_id", ""))
 	maxTokens := req.GetInt("max_tokens", 4000)
 	includeRelations := req.GetBool("include_relations", false)
 	s.observeQueryTopicShift(projectID, query, "context")
@@ -418,7 +418,7 @@ func (s *Server) handleContext(ctx context.Context, req mcp.CallToolRequest) (*m
 }
 
 func (s *Server) handleMaintain(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID := req.GetString("project_id", "")
+	projectID := projectIDOrDefault(req.GetString("project_id", ""))
 	if err := s.mnemos.Maintain(ctx, projectID); err != nil {
 		return mcpError(err.Error()), nil
 	}
@@ -441,7 +441,7 @@ func (s *Server) handleCompile(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcpError("content is required"), nil
 	}
 
-	projectID := req.GetString("project_id", "")
+	projectID := projectIDOrDefault(req.GetString("project_id", ""))
 	sourceIDsStr := req.GetString("source_ids", "")
 
 	// 1. Find previous versions to weaken
@@ -545,4 +545,11 @@ func splitTags(s string) []string {
 		}
 	}
 	return tags
+}
+
+func projectIDOrDefault(projectID string) string {
+	if projectID != "" {
+		return projectID
+	}
+	return os.Getenv("MNEMOS_PROJECT_ID")
 }

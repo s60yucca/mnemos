@@ -49,6 +49,9 @@ func main() {
 	}
 	observe.SetDataDir(cfg.DataDir)
 	_ = os.Setenv("MNEMOS_DATA_DIR", cfg.DataDir)
+	if projectID := projectIDFromArgs(os.Args[1:]); projectID != "" {
+		_ = os.Setenv("MNEMOS_PROJECT_ID", projectID)
+	}
 
 	// Logger
 	logger := util.NewLogger(cfg.LogLevel, cfg.LogFormat)
@@ -169,6 +172,25 @@ func configPathFromArgs(args []string) string {
 		}
 	}
 	return os.Getenv("MNEMOS_CONFIG")
+}
+
+func projectIDFromArgs(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project", "-p":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		default:
+			if strings.HasPrefix(args[i], "--project=") {
+				return strings.TrimPrefix(args[i], "--project=")
+			}
+			if strings.HasPrefix(args[i], "-p=") {
+				return strings.TrimPrefix(args[i], "-p=")
+			}
+		}
+	}
+	return ""
 }
 
 func isServerInvocation(args []string) bool {

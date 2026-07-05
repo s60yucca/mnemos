@@ -20,7 +20,7 @@ type MnemosMCPEntry struct {
 // the mnemos hook entries using binPath as the absolute binary path, and writes it
 // back. Idempotent — re-running with a different binPath rewrites existing mnemos
 // hook entries in-place rather than creating duplicates.
-func MergeClaudeSettings(filePath, binPath string) error {
+func MergeClaudeSettings(filePath, binPath string, projectIDOverride ...string) error {
 	type hookEntry struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
@@ -55,6 +55,11 @@ func MergeClaudeSettings(filePath, binPath string) error {
 		hooks = make(map[string]json.RawMessage)
 	}
 
+	projectID := ""
+	if len(projectIDOverride) > 0 {
+		projectID = SanitizeProjectID(projectIDOverride[0])
+	}
+
 	// Mnemos hook event → command suffix mapping.
 	// The full command is: binPath + " hook " + suffix
 	mnemosEvents := map[string]string{
@@ -65,6 +70,9 @@ func MergeClaudeSettings(filePath, binPath string) error {
 
 	for event, suffix := range mnemosEvents {
 		desiredCmd := binPath + " hook " + suffix
+		if projectID != "" {
+			desiredCmd = "MNEMOS_PROJECT_ID=" + projectID + " " + desiredCmd
+		}
 
 		// Decode existing groups for this event (may be nil)
 		var groups []hookGroup
@@ -236,7 +244,18 @@ func MergeMCPConfig(filePath string, serverName string, entry MnemosMCPEntry) er
 // MergeClaudeGlobalMCP registers the mnemos MCP server in the Claude global config.
 // Strategy 1: use the claude CLI (idempotent: remove then add).
 // Strategy 2 (fallback): merge directly into ~/.claude.json.
-func MergeClaudeGlobalMCP(binPath string) error {
+func MergeClaudeGlobalMCP(binPath string, projectIDOverride ...string) error {
+	projectID := ""
+	if len(projectIDOverride) > 0 {
+		projectID = SanitizeProjectID(projectIDOverride[0])
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home dir: %w", err)
+	}
+	claudeJSON := filepath.Join(home, ".claude.json")
+
 	claudePath, err := exec.LookPath("claude")
 	if err == nil {
 		// Remove first (ignore error — may not exist)
@@ -245,21 +264,25 @@ func MergeClaudeGlobalMCP(binPath string) error {
 		// Add with absolute binPath
 		addCmd := exec.Command(claudePath, "mcp", "add", "--scope", "user", "mnemos", "--", binPath, "serve")
 		if err := addCmd.Run(); err == nil {
+			if projectID != "" {
+				return MergeMCPEnv(claudeJSON, "mnemos", map[string]string{"MNEMOS_PROJECT_ID": projectID})
+			}
 			return nil
 		}
 		// fall through to strategy 2 on non-zero exit
 	}
 
 	// Strategy 2: direct file merge
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("resolve home dir: %w", err)
-	}
-	claudeJSON := filepath.Join(home, ".claude.json")
-	return MergeMCPConfig(claudeJSON, "mnemos", MnemosMCPEntry{
+	if err := MergeMCPConfig(claudeJSON, "mnemos", MnemosMCPEntry{
 		Command: binPath,
 		Args:    []string{"serve"},
-	})
+	}); err != nil {
+		return err
+	}
+	if projectID != "" {
+		return MergeMCPEnv(claudeJSON, "mnemos", map[string]string{"MNEMOS_PROJECT_ID": projectID})
+	}
+	return nil
 }
 
 // RemoveMCPEntry removes a server entry from the mcpServers map in a JSON file.

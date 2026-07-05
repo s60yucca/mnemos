@@ -166,3 +166,10 @@ func TestObserveQueryTopicShiftDoesNotEmitForFirstTopic(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, strings.Contains(string(data), "\ttopic_shift\t"))
 }
+
+func TestProjectIDOrDefaultFallsBackToEnv(t *testing.T) {
+	t.Setenv("MNEMOS_PROJECT_ID", "env-project")
+
+	assert.Equal(t, "explicit-project", projectIDOrDefault("explicit-project"))
+	assert.Equal(t, "env-project", projectIDOrDefault(""))
+}

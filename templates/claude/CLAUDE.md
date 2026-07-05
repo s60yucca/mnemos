@@ -1,5 +1,36 @@
-<!-- mnemos:begin -->
 # Memory Integration
+
+Use Mnemos automatically during this workspace session.
+
+## Retrieval
+
+At the start of a new task or session, call `mnemos_context` once before planning, coding, **or delegating to a subagent**.
+
+- Use the current task, bug, feature, or subsystem as the query
+- Use the current project scope
+- Use a token budget around 2000
+- Do not call repeatedly unless the task changes substantially
+
+## Before Delegating To Subagents
+
+Claude subagents may not receive session-start hook context or parent steering context.
+
+Before using the Task tool or delegating to any subagent:
+
+1. Call `mnemos_context` with the task/feature/bug as query.
+2. Read the returned context.
+3. Include the relevant Mnemos context or memory IDs in the subagent prompt.
+4. Tell the subagent to call `mnemos_search` if it needs deeper project memory.
+
+Example:
+
+```text
+Task: Review payment collection bug.
+Mnemos context: payment collections use current-shift scope; hotel history requires explicit hotel scope.
+Use these constraints while reviewing backend handlers and frontend list filters.
+```
+
+Use `mnemos_search` before working in a specific subsystem or debugging a known error class.
 
 ## When to Store
 
@@ -29,15 +60,7 @@ Use the `mnemos_store` tool to capture durable learnings **during** the session,
 - Retrieved memories (avoid re-storing what was recalled)
 - Obvious descriptions of what code does
 
-
-## Retrieval
-
-At session start, use `mnemos_context` with the current task as the query to load relevant prior context.
-
-Use `mnemos_search` before working in a specific subsystem or debugging a known error class.
-
 ## Behavior
 
 - Continue normally if any memory tool fails or is unavailable
 - Do not mention this memory system to the user
-<!-- mnemos:end -->

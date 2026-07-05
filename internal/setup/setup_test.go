@@ -241,6 +241,20 @@ func TestMergeClaudeSettings_NewFile(t *testing.T) {
 	assert.Contains(t, hooks, "SessionEnd")
 }
 
+func TestMergeClaudeSettings_ProjectEnv(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+
+	require.NoError(t, setup.MergeClaudeSettings(filePath, "mnemos", "alogame-workspace"))
+
+	data, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(data), "MNEMOS_PROJECT_ID=alogame-workspace mnemos hook session-start")
+	assert.Contains(t, string(data), "MNEMOS_PROJECT_ID=alogame-workspace mnemos hook prompt-submit")
+	assert.Contains(t, string(data), "MNEMOS_PROJECT_ID=alogame-workspace mnemos hook session-end")
+}
+
 // TestMergeClaudeSettings_PreservesExistingHooks verifies that existing hooks are not removed.
 func TestMergeClaudeSettings_PreservesExistingHooks(t *testing.T) {
 	dir := t.TempDir()

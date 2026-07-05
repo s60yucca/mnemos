@@ -286,6 +286,10 @@ mnemos setup codex        # writes ~/.codex/config.toml (global, CLI + VSCode)
 
 Flags: `--global` (install for all projects), `--force` (overwrite existing), `--project <id>` (override project ID).
 
+For Claude Code, `--project <id>` writes `MNEMOS_PROJECT_ID` into the MCP entry and hook commands. This is the canonical project scope used by hooks and `mnemos serve`; `mnemos --project <id> ...` is bridged to the same runtime environment for manual commands.
+
+Claude subagents may not receive session-start hook context. The main agent should call `mnemos_context` before delegation and include relevant memories or memory IDs in the subagent task prompt.
+
 > **Codex note:** Codex uses a single global config shared between the CLI and
 > VSCode extension. `--global` and `--local` are ignored. The setup command
 > writes `MNEMOS_PROJECT_ID` and accepts `--project <id>` as an explicit

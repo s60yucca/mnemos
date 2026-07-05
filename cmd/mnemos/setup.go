@@ -137,6 +137,14 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 	if _, err := setup.EnsureGlobalConfig(); err != nil {
 		return fmt.Errorf("ensure global config: %w", err)
 	}
+	projectID := ""
+	if projectIDOverride != "" {
+		var err error
+		projectID, err = setup.DeriveProjectID(projectIDOverride)
+		if err != nil {
+			return fmt.Errorf("derive project id: %w", err)
+		}
+	}
 
 	// Resolve base directory
 	baseDir, err := resolveBaseDir(global)
@@ -174,7 +182,7 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 				return fmt.Errorf("merge %s: %w", targetPath, err)
 			}
 		} else if fm.MergeJSON {
-			if err := setup.MergeClaudeSettings(targetPath, binPath); err != nil {
+			if err := setup.MergeClaudeSettings(targetPath, binPath, projectID); err != nil {
 				return fmt.Errorf("merge %s: %w", targetPath, err)
 			}
 		} else {
@@ -235,7 +243,7 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 	// Merge MCP config — claude global uses a different strategy
 	if clientName == "claude" && global {
 		// Use MergeClaudeGlobalMCP instead of generic MergeMCPConfig
-		if err := setup.MergeClaudeGlobalMCP(binPath); err != nil {
+		if err := setup.MergeClaudeGlobalMCP(binPath, projectID); err != nil {
 			return fmt.Errorf("merge global MCP: %w", err)
 		}
 
@@ -266,6 +274,13 @@ func runSetup(clientName string, force, global bool, projectIDOverride string) e
 			Args:    []string{"serve"},
 		}); err != nil {
 			return fmt.Errorf("merge MCP config: %w", err)
+		}
+		if projectID != "" {
+			if err := setup.MergeMCPEnv(mcpTarget, "mnemos", map[string]string{
+				"MNEMOS_PROJECT_ID": projectID,
+			}); err != nil {
+				return fmt.Errorf("merge MCP env: %w", err)
+			}
 		}
 		if clientName == "trae" {
 			_ = setup.MergeMCPEnv(mcpTarget, "mnemos", map[string]string{
