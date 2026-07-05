@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mnemos-dev/mnemos/internal/benchmark"
+	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -376,6 +377,8 @@ func TestBenchStatus_SessionCounts(t *testing.T) {
 // TestBenchSessionStart_EventEmission verifies that session-start emits an event.
 func TestBenchSessionStart_EventEmission(t *testing.T) {
 	tmpDir := t.TempDir()
+	observe.SetDataDir(tmpDir)
+	t.Cleanup(func() { observe.SetLogPath("") })
 
 	// Capture output using a pipe
 	oldStdout := os.Stdout
@@ -383,7 +386,7 @@ func TestBenchSessionStart_EventEmission(t *testing.T) {
 	os.Stdout = w
 
 	cmd := newBenchSessionStartCmd(tmpDir)
-	cmd.SetArgs([]string{"--category", "refactor"})
+	cmd.SetArgs([]string{"--category", "refactor", "--project", "manual-project", "--session-id", "manual-test"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("session-start failed: %v", err)
@@ -399,11 +402,21 @@ func TestBenchSessionStart_EventEmission(t *testing.T) {
 	if !strings.Contains(out, "Session started:") {
 		t.Errorf("expected 'Session started:' in output, got:\n%s", out)
 	}
+	state, err := readManualBenchSessionState(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "manual-test", state.SessionID)
+	assert.Equal(t, "manual-project", state.ProjectID)
 }
 
 // TestBenchSessionEnd_EventEmission verifies that session-end emits an event.
 func TestBenchSessionEnd_EventEmission(t *testing.T) {
 	tmpDir := t.TempDir()
+	observe.SetDataDir(tmpDir)
+	t.Cleanup(func() { observe.SetLogPath("") })
+	require.NoError(t, benchmark.WriteBenchMode(tmpDir, benchmark.BenchModeOff))
+	startCmd := newBenchSessionStartCmd(tmpDir)
+	startCmd.SetArgs([]string{"--category", "debug", "--project", "manual-project", "--session-id", "manual-test"})
+	require.NoError(t, startCmd.Execute())
 
 	// Capture output using a pipe
 	oldStdout := os.Stdout
@@ -424,7 +437,15 @@ func TestBenchSessionEnd_EventEmission(t *testing.T) {
 	io.Copy(&output, r)
 	out := output.String()
 
-	if !strings.Contains(out, "Session end signal sent") {
-		t.Errorf("expected 'Session end signal sent' in output, got:\n%s", out)
+	if !strings.Contains(out, "Session ended: manual-test") {
+		t.Errorf("expected 'Session ended: manual-test' in output, got:\n%s", out)
 	}
+	_, err := os.Stat(manualBenchSessionStatePath(tmpDir))
+	assert.True(t, os.IsNotExist(err))
+	sessions, err := extractSessions(benchmarkLogPath(tmpDir), time.Now().UTC().Add(-time.Hour), "", "off", false)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	assert.Equal(t, "manual-test", sessions[0].SessionID)
+	assert.Equal(t, "off", sessions[0].Mode)
+	assert.Equal(t, "production", sessions[0].Provenance)
 }

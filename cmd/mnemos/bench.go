@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,14 @@ import (
 	"github.com/mnemos-dev/mnemos/internal/observe"
 	"github.com/spf13/cobra"
 )
+
+type manualBenchSessionState struct {
+	SessionID string `json:"session_id"`
+	StartedAt string `json:"started_at"`
+	ProjectID string `json:"project_id"`
+	Mode      string `json:"mode"`
+	Category  string `json:"category"`
+}
 
 // newBenchCmd creates the bench command with subcommands
 func newBenchCmd(dataDir string) *cobra.Command {
@@ -241,6 +250,8 @@ func newBenchStatusCmd(dataDir string) *cobra.Command {
 // newBenchSessionStartCmd creates the "mnemos bench session-start" command
 func newBenchSessionStartCmd(dataDir string) *cobra.Command {
 	var category string
+	var projectID string
+	var sessionID string
 
 	cmd := &cobra.Command{
 		Use:   "session-start",
@@ -254,18 +265,38 @@ Use this if you want to explicitly mark session boundaries.`,
 			// The actual session tracking happens in the MCP server
 			// We just emit an event here for manual tracking
 
-			sessionID := fmt.Sprintf("manual-%d", time.Now().Unix())
+			if sessionID == "" {
+				sessionID = fmt.Sprintf("manual-%d", time.Now().UnixNano())
+			}
+			if projectID == "" {
+				projectID = "manual"
+			}
+			mode, err := benchmark.ReadBenchMode(dataDir)
+			if err != nil {
+				mode = benchmark.BenchModeOn
+			}
+			startedAt := time.Now().UTC()
 
 			observe.Feature("bench_session_start", map[string]any{
 				"session_id": sessionID,
-				"project_id": "manual",
-				"mode":       "unknown",
+				"project_id": projectID,
+				"mode":       string(mode),
 				"category":   category,
-				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+				"timestamp":  startedAt.Format(time.RFC3339),
 				"provenance": "production",
 			})
+			if err := writeManualBenchSessionState(dataDir, manualBenchSessionState{
+				SessionID: sessionID,
+				StartedAt: startedAt.Format(time.RFC3339),
+				ProjectID: projectID,
+				Mode:      string(mode),
+				Category:  category,
+			}); err != nil {
+				return fmt.Errorf("failed to write manual session state: %w", err)
+			}
 
 			fmt.Printf("Session started: %s\n", sessionID)
+			fmt.Printf("Mode: %s\n", strings.ToUpper(string(mode)))
 			fmt.Println("Note: Automatic session tracking via MCP server is recommended.")
 
 			return nil
@@ -273,12 +304,15 @@ Use this if you want to explicitly mark session boundaries.`,
 	}
 
 	cmd.Flags().StringVar(&category, "category", "other", "Task category (refactor|feature|debug|docs|other)")
+	cmd.Flags().StringVar(&projectID, "project", "", "Project ID for manual benchmark session")
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "Session ID for manual benchmark session")
 
 	return cmd
 }
 
 // newBenchSessionEndCmd creates the "mnemos bench session-end" command
 func newBenchSessionEndCmd(dataDir string) *cobra.Command {
+	var sessionID string
 	cmd := &cobra.Command{
 		Use:   "session-end",
 		Short: "Manually end the current benchmark session",
@@ -290,24 +324,79 @@ The 10-minute inactivity timeout will auto-close if you forget.`,
 			// Note: This command is a placeholder for manual session end
 			// The actual session tracking happens in the MCP server
 			// We just emit an event here for manual tracking
+			state, err := readManualBenchSessionState(dataDir)
+			if err != nil && sessionID == "" {
+				return fmt.Errorf("failed to read manual session state: %w", err)
+			}
+			if sessionID == "" {
+				sessionID = state.SessionID
+			}
+			if sessionID == "" {
+				sessionID = "manual"
+			}
+			mode := state.Mode
+			if mode == "" {
+				currentMode, err := benchmark.ReadBenchMode(dataDir)
+				if err != nil {
+					currentMode = benchmark.BenchModeOn
+				}
+				mode = string(currentMode)
+			}
+			durationMS := int64(0)
+			if startedAt, err := time.Parse(time.RFC3339, state.StartedAt); err == nil {
+				durationMS = time.Since(startedAt).Milliseconds()
+				if durationMS < 0 {
+					durationMS = 0
+				}
+			}
 
 			observe.Feature("bench_session_end", map[string]any{
-				"session_id":      "manual",
-				"duration_ms":     0,
+				"session_id":      sessionID,
+				"mode":            mode,
+				"duration_ms":     durationMS,
 				"tokens_in":       0,
 				"tokens_out":      0,
 				"mcp_calls_count": 0,
 				"task_completed":  true,
 			})
+			_ = os.Remove(manualBenchSessionStatePath(dataDir))
 
-			fmt.Println("Session end signal sent.")
+			fmt.Printf("Session ended: %s\n", sessionID)
 			fmt.Println("Note: Automatic session tracking via MCP server is recommended.")
 
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&sessionID, "session-id", "", "Session ID for manual benchmark session")
 
 	return cmd
+}
+
+func manualBenchSessionStatePath(dataDir string) string {
+	return filepath.Join(dataDir, "bench_manual_session.json")
+}
+
+func writeManualBenchSessionState(dataDir string, state manualBenchSessionState) error {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(manualBenchSessionStatePath(dataDir), data, 0o600)
+}
+
+func readManualBenchSessionState(dataDir string) (manualBenchSessionState, error) {
+	data, err := os.ReadFile(manualBenchSessionStatePath(dataDir))
+	if err != nil {
+		return manualBenchSessionState{}, err
+	}
+	var state manualBenchSessionState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return manualBenchSessionState{}, err
+	}
+	return state, nil
 }
 
 // SessionRecord represents a parsed session from the log

@@ -152,6 +152,9 @@ func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents [
 		}
 		return StatusNotFiring
 	}
+	if featureName == "decay" && hasRecentFeatureEvent(featureEvents, 36*time.Hour) {
+		return StatusFiring
+	}
 
 	// Group feature events by day
 	eventsByDay := make(map[string]int)
@@ -215,6 +218,16 @@ func classifyFeatureNamed(featureName string, featureEvents []Event, allEvents [
 		return StatusFiring
 	}
 	return StatusLow
+}
+
+func hasRecentFeatureEvent(events []Event, maxAge time.Duration) bool {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	for _, event := range events {
+		if !event.Timestamp.Before(cutoff) {
+			return true
+		}
+	}
+	return false
 }
 
 func isFeatureDenominator(featureName, eventName string) bool {

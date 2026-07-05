@@ -538,3 +538,29 @@ func TestClassifyFeature_MinDailyBaseline(t *testing.T) {
 		t.Errorf("expected StatusFiring for MinDaily baseline, got %v", status)
 	}
 }
+
+func TestClassifyFeature_DecayRecentEventIsHealthy(t *testing.T) {
+	now := time.Now().UTC()
+	var events []Event
+	for day := 0; day < 7; day++ {
+		dayTime := now.Add(time.Duration(-day) * 24 * time.Hour)
+		for i := 0; i < observe.ActiveDayThreshold; i++ {
+			events = append(events, Event{
+				Timestamp: dayTime.Add(time.Duration(i) * time.Minute),
+				Feature:   "store_call",
+				Attrs:     map[string]string{},
+			})
+		}
+	}
+	decayEvents := []Event{{
+		Timestamp: now.Add(-time.Hour),
+		Feature:   "decay",
+		Attrs:     map[string]string{"outcome": "ok"},
+	}}
+	events = append(events, decayEvents...)
+
+	status := classifyFeatureNamed("decay", decayEvents, events, observe.Baselines["decay"], detectActiveDays(events))
+	if status != StatusFiring {
+		t.Errorf("expected recent decay event to be firing, got %v", status)
+	}
+}
