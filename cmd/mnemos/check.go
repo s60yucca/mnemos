@@ -36,6 +36,8 @@ const (
 type CheckReport struct {
 	Status      CheckStatus   `json:"status"`
 	Summary     string        `json:"summary"`
+	Host        string        `json:"host"`
+	ReporterPID int           `json:"reporter_pid"`
 	ProjectID   string        `json:"project_id,omitempty"`
 	Signals     []CheckSignal `json:"signals"`
 	ActionItems []ActionItem  `json:"action_items"`
@@ -146,7 +148,7 @@ func newCheckCmd(cfg *config.Config, mnemos *core.Mnemos, buildVersion string) *
 }
 
 func runCheck(ctx context.Context, cfg *config.Config, mnemos *core.Mnemos, buildVersion string, opts checkOptions) CheckReport {
-	report := CheckReport{ProjectID: opts.project}
+	report := CheckReport{Host: runtimeHost(), ReporterPID: os.Getpid(), ProjectID: opts.project}
 	report.Signals = append(report.Signals, databaseSignal(cfg.DBPath()))
 	memories, stats, err := loadCheckMemories(ctx, mnemos, opts.project)
 	if err != nil {
@@ -790,6 +792,7 @@ func renderCheckJSON(w io.Writer, report CheckReport) error {
 
 func renderCheckText(w io.Writer, report CheckReport, verbose bool) {
 	fmt.Fprintf(w, "Mnemos Check - %s\n%s\n", report.Status, report.Summary)
+	fmt.Fprintf(w, "Host: %s (reporter pid=%d)\n", report.Host, report.ReporterPID)
 	if report.ProjectID != "" {
 		fmt.Fprintf(w, "Project: %s\n", report.ProjectID)
 	}

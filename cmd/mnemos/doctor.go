@@ -20,6 +20,8 @@ type DoctorReport struct {
 	Status      CheckStatus          `json:"status"`
 	Summary     string               `json:"summary"`
 	Version     string               `json:"version"`
+	Host        string               `json:"host"`
+	ReporterPID int                  `json:"reporter_pid"`
 	DataDir     string               `json:"data_dir"`
 	DBPath      string               `json:"db_path"`
 	Processes   DoctorProcessReport  `json:"processes"`
@@ -33,6 +35,8 @@ type DoctorProcessReport struct {
 	Status      CheckStatus     `json:"status"`
 	Summary     string          `json:"summary"`
 	Version     string          `json:"version"`
+	Host        string          `json:"host"`
+	ReporterPID int             `json:"reporter_pid"`
 	DataDir     string          `json:"data_dir"`
 	DBPath      string          `json:"db_path"`
 	ServeCount  int             `json:"serve_count"`
@@ -202,6 +206,8 @@ func buildDoctorReport(cfg *config.Config, buildVersion string) (DoctorReport, e
 		Status:      status,
 		Summary:     summary,
 		Version:     buildVersion,
+		Host:        runtimeHost(),
+		ReporterPID: os.Getpid(),
 		DataDir:     cfg.DataDir,
 		DBPath:      cfg.DBPath(),
 		Processes:   processes,
@@ -225,6 +231,8 @@ func buildDoctorProcessReportTolerant(cfg *config.Config, buildVersion string) D
 		Status:      CheckUnknown,
 		Summary:     "Mnemos process state could not be inspected in this environment.",
 		Version:     buildVersion,
+		Host:        runtimeHost(),
+		ReporterPID: os.Getpid(),
 		DataDir:     cfg.DataDir,
 		DBPath:      cfg.DBPath(),
 		Autopilot:   readDoctorAutopilot(cfg.DataDir, nil),
@@ -260,6 +268,8 @@ func buildDoctorProcessReport(cfg *config.Config, buildVersion string) (DoctorPr
 		Status:      status,
 		Summary:     summary,
 		Version:     buildVersion,
+		Host:        runtimeHost(),
+		ReporterPID: os.Getpid(),
 		DataDir:     cfg.DataDir,
 		DBPath:      cfg.DBPath(),
 		ServeCount:  len(processes),
@@ -381,6 +391,14 @@ func aggregateDoctorStatus(findings []DoctorFinding) CheckStatus {
 		}
 	}
 	return status
+}
+
+func runtimeHost() string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return "unknown"
+	}
+	return host
 }
 
 func listMnemosServeProcesses() ([]DoctorProcess, error) {
@@ -506,6 +524,8 @@ func diagnoseProcesses(processes []DoctorProcess, autopilotInfo DoctorAutopilot)
 func renderDoctorReport(w interface{ Write([]byte) (int, error) }, report DoctorReport) {
 	fmt.Fprintf(w, "Mnemos Doctor - %s\n%s\n\n", report.Status, report.Summary)
 	fmt.Fprintf(w, "Version:  %s\n", report.Version)
+	fmt.Fprintf(w, "Host:     %s\n", report.Host)
+	fmt.Fprintf(w, "Reporter: pid=%d\n", report.ReporterPID)
 	fmt.Fprintf(w, "Data dir: %s\n", report.DataDir)
 	fmt.Fprintf(w, "DB path:  %s\n\n", report.DBPath)
 	fmt.Fprintf(w, "Processes: %s (%d mnemos serve)\n", report.Processes.Status, report.Processes.ServeCount)
@@ -566,6 +586,8 @@ func renderDoctorLogReport(w interface{ Write([]byte) (int, error) }, report Doc
 func renderDoctorProcessReport(w interface{ Write([]byte) (int, error) }, report DoctorProcessReport) {
 	fmt.Fprintf(w, "Mnemos Doctor - %s\n%s\n\n", report.Status, report.Summary)
 	fmt.Fprintf(w, "Version:  %s\n", report.Version)
+	fmt.Fprintf(w, "Host:     %s\n", report.Host)
+	fmt.Fprintf(w, "Reporter: pid=%d\n", report.ReporterPID)
 	fmt.Fprintf(w, "Data dir: %s\n", report.DataDir)
 	fmt.Fprintf(w, "DB path:  %s\n\n", report.DBPath)
 	fmt.Fprintf(w, "mnemos serve processes: %d\n", report.ServeCount)

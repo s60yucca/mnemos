@@ -83,13 +83,15 @@ func TestDiagnoseProcesses_StaleLeaderLockFails(t *testing.T) {
 
 func TestRenderDoctorProcessReport(t *testing.T) {
 	report := DoctorProcessReport{
-		Status:     CheckWarn,
-		Summary:    "runtime needs attention",
-		Version:    "test",
-		DataDir:    "/tmp/mnemos",
-		DBPath:     "/tmp/mnemos/mnemos.db",
-		ServeCount: 1,
-		Processes:  []DoctorProcess{{PID: 10, PPID: 1, Elapsed: "01:00", Command: "mnemos serve"}},
+		Status:      CheckWarn,
+		Summary:     "runtime needs attention",
+		Version:     "test",
+		Host:        "test-host",
+		ReporterPID: 1234,
+		DataDir:     "/tmp/mnemos",
+		DBPath:      "/tmp/mnemos/mnemos.db",
+		ServeCount:  1,
+		Processes:   []DoctorProcess{{PID: 10, PPID: 1, Elapsed: "01:00", Command: "mnemos serve"}},
 		Autopilot: DoctorAutopilot{
 			LockPID:       10,
 			LeaderRunning: true,
@@ -104,6 +106,8 @@ func TestRenderDoctorProcessReport(t *testing.T) {
 
 	rendered := out.String()
 	assert.Contains(t, rendered, "Mnemos Doctor - WARN")
+	assert.Contains(t, rendered, "Host:     test-host")
+	assert.Contains(t, rendered, "Reporter: pid=1234")
 	assert.Contains(t, rendered, "pid=10")
 	assert.Contains(t, rendered, "leader_running: true")
 	assert.Contains(t, rendered, "[WARN] sample warning")
@@ -139,11 +143,13 @@ func TestBuildDoctorDatabaseReportFailsForMissingDatabase(t *testing.T) {
 
 func TestRenderDoctorReport(t *testing.T) {
 	report := DoctorReport{
-		Status:  CheckFail,
-		Summary: "blocking issue",
-		Version: "test",
-		DataDir: "/tmp/mnemos",
-		DBPath:  "/tmp/mnemos/mnemos.db",
+		Status:      CheckFail,
+		Summary:     "blocking issue",
+		Version:     "test",
+		Host:        "test-host",
+		ReporterPID: 5678,
+		DataDir:     "/tmp/mnemos",
+		DBPath:      "/tmp/mnemos/mnemos.db",
 		Processes: DoctorProcessReport{
 			Status:     CheckWarn,
 			ServeCount: 2,
@@ -166,6 +172,8 @@ func TestRenderDoctorReport(t *testing.T) {
 
 	rendered := out.String()
 	assert.Contains(t, rendered, "Mnemos Doctor - FAIL")
+	assert.Contains(t, rendered, "Host:     test-host")
+	assert.Contains(t, rendered, "Reporter: pid=5678")
 	assert.Contains(t, rendered, "Processes: WARN (2 mnemos serve)")
 	assert.Contains(t, rendered, "Database:  FAIL (123 bytes)")
 	assert.Contains(t, rendered, "Logs:      PASS (789 bytes)")
