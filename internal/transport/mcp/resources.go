@@ -45,6 +45,17 @@ func (s *Server) registerResources() {
 		),
 		s.handleSessionContextResource,
 	)
+
+	// mnemos://runtime
+	s.mcpServer.AddResource(
+		mcp.NewResource(
+			"mnemos://runtime",
+			"Live Mnemos MCP runtime identity",
+			mcp.WithResourceDescription("Reports the live MCP server version, process identity, executable, uptime, data dir, and project scope"),
+			mcp.WithMIMEType("application/json"),
+		),
+		s.handleRuntimeResource,
+	)
 }
 
 func (s *Server) handleMemoriesResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
@@ -120,5 +131,17 @@ func (s *Server) handleSessionContextResource(ctx context.Context, req mcp.ReadR
 		URI:      "mnemos://session-context",
 		MIMEType: "text/plain",
 		Text:     payload,
+	}}, nil
+}
+
+func (s *Server) handleRuntimeResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	bytes, err := json.MarshalIndent(s.runtimeInfo(), "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal runtime info: %w", err)
+	}
+	return []mcp.ResourceContents{mcp.TextResourceContents{
+		URI:      "mnemos://runtime",
+		MIMEType: "application/json",
+		Text:     string(bytes),
 	}}, nil
 }

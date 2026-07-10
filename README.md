@@ -118,6 +118,22 @@ Verifies whether durable memory was captured. Optionally stores a minimal breadc
 
 Steering tells the agent *what* is worth remembering. Hooks handle retrieval, dedup, summarization, linking — so the agent doesn't waste tokens thinking about memory logistics.
 
+After upgrading Mnemos, verify both the CLI and the live MCP server:
+
+```bash
+mnemos version
+mnemos doctor all
+```
+
+Then ask your agent to call `mnemos_runtime`. That reports the actual MCP server process handling tool calls, including `version`, `host`, `pid`, `started_at`, `executable`, `data_dir`, and `project_id`. If it still shows an old version, close the MCP client, stop stale servers with `pkill -f "mnemos serve"`, and reopen the client.
+
+You can validate the returned JSON with:
+
+```bash
+mnemos doctor runtime --from-json runtime.json
+mnemos check --mcp-runtime runtime.json
+```
+
 ---
 
 ## Passive autopilot daemon
@@ -190,6 +206,7 @@ Most operations stay under 60 ms regardless of dataset size. Hook subcommands us
 | `mnemos_delete` | Soft-delete (recoverable via maintain) |
 | `mnemos_relate` | Link two memories (supersedes, caused_by, depends_on) |
 | `mnemos_maintain` | Run decay, archival, GC, stale detection |
+| `mnemos_runtime` | Report live MCP server version, host, pid, executable, uptime, data dir, and project scope |
 
 ---
 
@@ -332,7 +349,8 @@ mnemos maintain                                       # decay + stale + GC
 mnemos status                                         # automatic feature configuration
 mnemos eval [--project myapp]                         # knowledge quality metrics
 mnemos health [--project myapp]                       # raw feature activity
-mnemos check [--project myapp]                        # verify the automatic knowledge loop
+mnemos check [--project myapp] [--mcp-runtime runtime.json]  # verify the automatic knowledge loop
+mnemos doctor runtime --from-json runtime.json        # validate live MCP server identity
 mnemos check --launch                                 # apply public-launch readiness gates
 mnemos check --fix                                    # archive older generated reports safely
 mnemos serve                                          # MCP server (stdio)

@@ -99,6 +99,7 @@ func newDoctorCmd(cfg *config.Config, buildVersion string) *cobra.Command {
 	cmd.AddCommand(newDoctorDatabaseCmd(cfg))
 	cmd.AddCommand(newDoctorLogsCmd(cfg))
 	cmd.AddCommand(newDoctorProcessesCmd(cfg, buildVersion))
+	cmd.AddCommand(newDoctorRuntimeCmd(cfg, buildVersion))
 	return cmd
 }
 
@@ -184,6 +185,35 @@ func newDoctorProcessesCmd(cfg *config.Config, buildVersion string) *cobra.Comma
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
+	return cmd
+}
+
+func newDoctorRuntimeCmd(cfg *config.Config, buildVersion string) *cobra.Command {
+	var fromJSON string
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "runtime",
+		Short: "Validate live MCP runtime identity from mnemos_runtime JSON",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			snapshot, err := readRuntimeSnapshotArg(fromJSON, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			report := buildMCPRuntimeReport(snapshot, buildVersion, cfg.DataDir)
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			renderDoctorRuntimeReport(cmd.OutOrStdout(), report)
+			if report.Status == CheckFail {
+				return checkFailedError{}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&fromJSON, "from-json", "", "Runtime JSON from mnemos_runtime (raw JSON, path, @path, or - for stdin)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output JSON")
 	return cmd
 }
@@ -575,6 +605,37 @@ func renderDoctorLogReport(w interface{ Write([]byte) (int, error) }, report Doc
 	}
 	if report.LegacyFallback {
 		fmt.Fprintln(w, "Legacy fallback: true")
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Findings:")
+	for _, finding := range report.Findings {
+		fmt.Fprintf(w, "  [%s] %s\n", finding.Severity, finding.Message)
+	}
+}
+
+func renderDoctorRuntimeReport(w interface{ Write([]byte) (int, error) }, report MCPRuntimeReport) {
+	fmt.Fprintf(w, "Mnemos Doctor Runtime - %s\n%s\n\n", report.Status, report.Summary)
+	fmt.Fprintln(w, "CLI:")
+	fmt.Fprintf(w, "  version:    %s\n", report.CLI.Version)
+	fmt.Fprintf(w, "  host:       %s\n", report.CLI.Host)
+	fmt.Fprintf(w, "  pid:        %d\n", report.CLI.PID)
+	fmt.Fprintf(w, "  executable: %s\n", report.CLI.Executable)
+	if report.CLI.DataDir != "" {
+		fmt.Fprintf(w, "  data_dir:   %s\n", report.CLI.DataDir)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "MCP:")
+	fmt.Fprintf(w, "  version:    %s\n", report.MCP.Version)
+	fmt.Fprintf(w, "  host:       %s\n", report.MCP.Host)
+	fmt.Fprintf(w, "  pid:        %d\n", report.MCP.PID)
+	fmt.Fprintf(w, "  ppid:       %d\n", report.MCP.PPID)
+	fmt.Fprintf(w, "  started_at: %s\n", report.MCP.StartedAt)
+	fmt.Fprintf(w, "  uptime_s:   %d\n", report.MCP.UptimeSeconds)
+	fmt.Fprintf(w, "  executable: %s\n", report.MCP.Executable)
+	fmt.Fprintf(w, "  data_dir:   %s\n", report.MCP.DataDir)
+	fmt.Fprintf(w, "  project_id: %s\n", report.MCP.ProjectID)
+	if report.MCP.ProjectStrategy != "" {
+		fmt.Fprintf(w, "  strategy:   %s\n", report.MCP.ProjectStrategy)
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Findings:")

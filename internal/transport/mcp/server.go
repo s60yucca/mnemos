@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -17,6 +18,8 @@ import (
 type Server struct {
 	mnemos         *core.Mnemos
 	mcpServer      *server.MCPServer
+	version        string
+	startedAt      time.Time
 	dataDir        string
 	sessionTracker *benchmark.SessionTracker
 	topicMu        sync.Mutex
@@ -37,6 +40,8 @@ func NewServer(mnemos *core.Mnemos, version string) *Server {
 
 	s := &Server{
 		mnemos:         mnemos,
+		version:        version,
+		startedAt:      time.Now().UTC(),
 		dataDir:        dataDir,
 		sessionTracker: sessionTracker,
 		activeTopics:   make(map[string]string),

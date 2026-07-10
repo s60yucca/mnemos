@@ -108,6 +108,17 @@ Use these defaults first:
 - store only once per meaningful completed change
 - project scope: set `MNEMOS_PROJECT_ID` per workspace, or pass `--project <id>` to commands; hooks and MCP server calls use `MNEMOS_PROJECT_ID` as the canonical runtime scope
 
+## Upgrade Verification
+
+After installing a new Mnemos version:
+
+1. Run `mnemos version` to verify the CLI binary.
+2. Run `mnemos doctor all` to verify host, process count, database, and logs.
+3. Call `mnemos_runtime` from the agent to verify the live MCP server process.
+4. Save or paste that JSON into `mnemos doctor runtime --from-json <json-or-file>` or `mnemos check --mcp-runtime <json-or-file>`.
+
+If `mnemos_runtime.version` is older than `mnemos version`, the MCP client is still connected to a stale server. Close the client, run `pkill -f "mnemos serve"` if needed, reopen the client, and call `mnemos_runtime` again.
+
 ## Phase Plan
 
 ### Phase A: Prompt Autopilot

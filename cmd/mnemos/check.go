@@ -74,11 +74,12 @@ type Mutation struct {
 }
 
 type checkOptions struct {
-	project string
-	json    bool
-	verbose bool
-	launch  bool
-	fix     bool
+	project    string
+	mcpRuntime string
+	json       bool
+	verbose    bool
+	launch     bool
+	fix        bool
 }
 
 type checkFailedError struct{}
@@ -140,6 +141,7 @@ func newCheckCmd(cfg *config.Config, mnemos *core.Mnemos, buildVersion string) *
 		},
 	}
 	cmd.Flags().StringVarP(&opts.project, "project", "p", "", "Project ID to check")
+	cmd.Flags().StringVar(&opts.mcpRuntime, "mcp-runtime", "", "Runtime JSON from mnemos_runtime (raw JSON, path, @path, or - for stdin)")
 	cmd.Flags().BoolVar(&opts.json, "json", false, "Emit JSON only")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "Include detailed evidence")
 	cmd.Flags().BoolVar(&opts.launch, "launch", false, "Apply public-launch readiness gates")
@@ -186,6 +188,22 @@ func runCheck(ctx context.Context, cfg *config.Config, mnemos *core.Mnemos, buil
 	report.Signals = append(report.Signals, autopilotSignal(cfg, events))
 	report.Signals = append(report.Signals, benchmarkSignal(cfg.DataDir, logPath, opts.project, opts.launch))
 	report.Signals = append(report.Signals, versionSignal(buildVersion, opts.launch))
+	if opts.mcpRuntime != "" {
+		snapshot, err := readRuntimeSnapshotArg(opts.mcpRuntime, os.Stdin)
+		if err != nil {
+			report.Signals = append(report.Signals, CheckSignal{
+				Name: "mcp runtime", Status: CheckFail, Critical: true, Scope: "global",
+				Value: "invalid", Explanation: err.Error(),
+			})
+		} else {
+			report.Signals = append(report.Signals, runtimeSignalFromReport(buildMCPRuntimeReport(snapshot, buildVersion, cfg.DataDir), true))
+		}
+	} else {
+		report.Signals = append(report.Signals, CheckSignal{
+			Name: "mcp runtime", Status: CheckUnknown, Critical: opts.launch, Scope: "global",
+			Value: "not provided", Explanation: "Ask your agent to call mnemos_runtime after upgrade, then pass the JSON to mnemos check --mcp-runtime.",
+		})
+	}
 
 	addSignalActions(&report)
 	finalizeCheckReport(&report, opts.launch)
@@ -767,6 +785,9 @@ func addSignalActions(report *CheckReport) {
 		case "version/package":
 			message = "Verify build version and installed package path."
 			command = "mnemos version"
+		case "mcp runtime":
+			message = "Ask your agent to call `mnemos_runtime`, then validate the JSON against this CLI."
+			command = "mnemos doctor runtime --from-json <runtime.json>"
 		case "generated noise":
 			message = "Run with --fix to apply safe cleanup."
 			command = "mnemos check --fix"

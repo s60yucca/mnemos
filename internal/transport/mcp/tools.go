@@ -90,6 +90,19 @@ func (s *Server) registerTools() {
 		mcp.WithString("project_id", mcp.Description("Project scope")),
 		mcp.WithString("source_ids", mcp.Description("Comma-separated source memory IDs")),
 	), s.handleCompile)
+
+	// mnemos_runtime
+	s.mcpServer.AddTool(mcp.NewTool("mnemos_runtime",
+		mcp.WithDescription("Report the live MCP server runtime identity: version, host, pid, executable, uptime, data dir, and project scope"),
+	), s.handleRuntime)
+}
+
+func (s *Server) handleRuntime(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	out, err := json.MarshalIndent(s.runtimeInfo(), "", "  ")
+	if err != nil {
+		return mcpError(err.Error()), nil
+	}
+	return mcpText(string(out)), nil
 }
 
 func (s *Server) handleStore(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
