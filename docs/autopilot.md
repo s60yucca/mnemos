@@ -119,6 +119,8 @@ After installing a new Mnemos version:
 
 If `mnemos_runtime.version` is older than `mnemos version`, the MCP client is still connected to a stale server. Close the client, run `pkill -f "mnemos serve"` if needed, reopen the client, and call `mnemos_runtime` again.
 
+Daily `mnemos check` treats MCP runtime validation as optional. Use `mnemos check --launch --mcp-runtime <json-or-file>` for public-launch gates or after package upgrades.
+
 ## Phase Plan
 
 ### Phase A: Prompt Autopilot

@@ -134,6 +134,8 @@ mnemos doctor runtime --from-json runtime.json
 mnemos check --mcp-runtime runtime.json
 ```
 
+Daily `mnemos check` does not require MCP runtime JSON. Public-launch or upgrade verification should pass `--mcp-runtime` so stale MCP servers are caught before release.
+
 ---
 
 ## Passive autopilot daemon

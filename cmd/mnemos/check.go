@@ -199,15 +199,25 @@ func runCheck(ctx context.Context, cfg *config.Config, mnemos *core.Mnemos, buil
 			report.Signals = append(report.Signals, runtimeSignalFromReport(buildMCPRuntimeReport(snapshot, buildVersion, cfg.DataDir), true))
 		}
 	} else {
-		report.Signals = append(report.Signals, CheckSignal{
-			Name: "mcp runtime", Status: CheckUnknown, Critical: opts.launch, Scope: "global",
-			Value: "not provided", Explanation: "Ask your agent to call mnemos_runtime after upgrade, then pass the JSON to mnemos check --mcp-runtime.",
-		})
+		report.Signals = append(report.Signals, missingMCPRuntimeSignal(opts.launch))
 	}
 
 	addSignalActions(&report)
 	finalizeCheckReport(&report, opts.launch)
 	return report
+}
+
+func missingMCPRuntimeSignal(launch bool) CheckSignal {
+	if launch {
+		return CheckSignal{
+			Name: "mcp runtime", Status: CheckUnknown, Critical: true, Scope: "global",
+			Value: "not provided", Explanation: "Launch readiness requires validating the live MCP server. Ask your agent to call mnemos_runtime after upgrade, then pass the JSON to mnemos check --mcp-runtime.",
+		}
+	}
+	return CheckSignal{
+		Name: "mcp runtime", Status: CheckPass, Critical: false, Scope: "global",
+		Value: "not checked", Explanation: "MCP runtime validation is optional for daily checks. For upgrade or launch readiness, call mnemos_runtime and pass the JSON to mnemos check --mcp-runtime.",
+	}
 }
 
 func databaseSignal(dbPath string) CheckSignal {

@@ -98,6 +98,19 @@ func TestAggregateUnknownDailyAndLaunch(t *testing.T) {
 	assert.Equal(t, CheckFail, aggregateCheckStatus(signals, true))
 }
 
+func TestMissingMCPRuntimeSignalIsOptionalForDailyChecks(t *testing.T) {
+	daily := missingMCPRuntimeSignal(false)
+	assert.Equal(t, "mcp runtime", daily.Name)
+	assert.Equal(t, CheckPass, daily.Status)
+	assert.False(t, daily.Critical)
+	assert.Equal(t, "not checked", daily.Value)
+
+	launch := missingMCPRuntimeSignal(true)
+	assert.Equal(t, CheckUnknown, launch.Status)
+	assert.True(t, launch.Critical)
+	assert.Equal(t, "not provided", launch.Value)
+}
+
 func TestFeatureHealthSparseTrafficDoesNotFail(t *testing.T) {
 	now := time.Now().UTC()
 	events := []Event{
