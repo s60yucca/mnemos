@@ -210,9 +210,9 @@ func printFreshness(memories []*domain.Memory) {
 	case staleRate < 0.1:
 		fmt.Printf("  ✓ Fresh — knowledge base is actively used.\n")
 	case staleRate < 0.3:
-		fmt.Printf("  ⚠ Some staleness — consider running 'mnemos maintain'.\n")
+		fmt.Printf("  ⚠ Some staleness — a few active memories have not been retrieved recently.\n")
 	default:
-		fmt.Printf("  ✗ Stale — %.0f%% of memories have not been accessed recently. Run 'mnemos maintain' and review.\n", staleRate*100)
+		fmt.Printf("  ✗ Stale — %.0f%% of memories have not been accessed recently. Run 'mnemos maintain', then review active memories that remain unused.\n", staleRate*100)
 	}
 	fmt.Println()
 }

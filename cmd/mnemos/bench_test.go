@@ -52,6 +52,25 @@ func TestBenchMode_Toggle(t *testing.T) {
 	}
 }
 
+func TestBenchMode_Aliases(t *testing.T) {
+	tmpDir := t.TempDir()
+	cmd := newBenchCmd(tmpDir)
+	cmd.SetArgs([]string{"off"})
+	require.NoError(t, cmd.Execute())
+
+	mode, err := benchmark.ReadBenchMode(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, benchmark.BenchModeOff, mode)
+
+	cmd = newBenchCmd(tmpDir)
+	cmd.SetArgs([]string{"on"})
+	require.NoError(t, cmd.Execute())
+
+	mode, err = benchmark.ReadBenchMode(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, benchmark.BenchModeOn, mode)
+}
+
 // TestBenchMode_InvalidMode verifies that invalid mode arguments are rejected.
 func TestBenchMode_InvalidMode(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -301,6 +301,7 @@ func renderReport(classifications map[string]Status, events []Event, window int)
 
 	if len(unknown) > 0 {
 		output.WriteString("? UNKNOWN (" + fmt.Sprintf("%d", len(unknown)) + ")\n")
+		output.WriteString("  Insufficient telemetry in this window; unknown does not mean the feature is broken.\n")
 		for _, feature := range unknown {
 			baseline := observe.Baselines[feature]
 			output.WriteString(fmt.Sprintf("  • %s: %s\n", feature, baseline.Expected))

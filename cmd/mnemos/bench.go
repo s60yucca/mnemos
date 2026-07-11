@@ -32,12 +32,25 @@ func newBenchCmd(dataDir string) *cobra.Command {
 	}
 
 	cmd.AddCommand(newBenchModeCmd(dataDir))
+	cmd.AddCommand(newBenchModeAliasCmd(dataDir, "on", benchmark.BenchModeOn))
+	cmd.AddCommand(newBenchModeAliasCmd(dataDir, "off", benchmark.BenchModeOff))
 	cmd.AddCommand(newBenchExportCmd(dataDir))
 	cmd.AddCommand(newBenchStatusCmd(dataDir))
 	cmd.AddCommand(newBenchSessionStartCmd(dataDir))
 	cmd.AddCommand(newBenchSessionEndCmd(dataDir))
 
 	return cmd
+}
+
+func newBenchModeAliasCmd(dataDir, name string, mode benchmark.BenchMode) *cobra.Command {
+	return &cobra.Command{
+		Use:   name,
+		Short: fmt.Sprintf("Set benchmark mode to %s", strings.ToUpper(string(mode))),
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return setBenchMode(dataDir, mode)
+		},
+	}
 }
 
 // newBenchModeCmd creates the "mnemos bench mode" command
@@ -64,26 +77,27 @@ simulating mnemos not being installed. Memories are still stored with
 				return fmt.Errorf("invalid mode: %s (must be 'on' or 'off')", modeStr)
 			}
 
-			// Read old mode
-			oldMode, _ := benchmark.ReadBenchMode(dataDir)
-
-			// Write new mode
-			if err := benchmark.WriteBenchMode(dataDir, mode); err != nil {
-				return fmt.Errorf("failed to write bench mode: %w", err)
-			}
-
-			// Emit mode change event
-			observe.Feature("bench_mode_change", map[string]any{
-				"old_mode": string(oldMode),
-				"new_mode": string(mode),
-			})
-
-			fmt.Printf("Benchmark mode set to: %s\n", mode)
-			return nil
+			return setBenchMode(dataDir, mode)
 		},
 	}
 
 	return cmd
+}
+
+func setBenchMode(dataDir string, mode benchmark.BenchMode) error {
+	oldMode, _ := benchmark.ReadBenchMode(dataDir)
+
+	if err := benchmark.WriteBenchMode(dataDir, mode); err != nil {
+		return fmt.Errorf("failed to write bench mode: %w", err)
+	}
+
+	observe.Feature("bench_mode_change", map[string]any{
+		"old_mode": string(oldMode),
+		"new_mode": string(mode),
+	})
+
+	fmt.Printf("Benchmark mode set to: %s\n", mode)
+	return nil
 }
 
 // newBenchExportCmd creates the "mnemos bench export" command

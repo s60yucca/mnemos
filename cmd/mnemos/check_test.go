@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/mnemos-dev/mnemos/internal/benchmark"
 	"github.com/mnemos-dev/mnemos/internal/config"
 	"github.com/mnemos-dev/mnemos/internal/core"
 	"github.com/mnemos-dev/mnemos/internal/core/lifecycle"
@@ -157,6 +159,36 @@ func TestAddSignalActionsRoutesDatabaseToDoctor(t *testing.T) {
 
 	require.Len(t, report.ActionItems, 1)
 	assert.Equal(t, "mnemos doctor database", report.ActionItems[0].Command)
+}
+
+func TestBenchmarkSignalIsLaunchOnly(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, benchmark.WriteBenchMode(dataDir, benchmark.BenchModeOn))
+	logPath := benchmarkLogPath(dataDir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+
+	now := time.Now().UTC()
+	var lines []string
+	for i := 0; i < 5; i++ {
+		start := now.Add(time.Duration(i) * time.Minute)
+		end := start.Add(time.Minute)
+		sessionID := "sess-" + string(rune('a'+i))
+		lines = append(lines,
+			start.Format(time.RFC3339)+"\tbench_session_start\tsession_id="+sessionID+" project_id=proj-1 mode=on category=feature timestamp="+start.Format(time.RFC3339)+" provenance=production",
+			end.Format(time.RFC3339)+"\tbench_session_end\tsession_id="+sessionID+" project_id=proj-1 mode=on category=feature timestamp="+end.Format(time.RFC3339)+" task_completed=true provenance=production",
+		)
+	}
+	require.NoError(t, os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644))
+
+	daily := benchmarkSignal(dataDir, logPath, "", false)
+	assert.Equal(t, CheckPass, daily.Status)
+	assert.False(t, daily.Critical)
+	assert.Contains(t, daily.Explanation, "optional")
+
+	launch := benchmarkSignal(dataDir, logPath, "", true)
+	assert.Equal(t, CheckFail, launch.Status)
+	assert.True(t, launch.Critical)
+	assert.Contains(t, launch.Explanation, "launch readiness")
 }
 
 func TestApplyCheckFixesArchivesOnlyVerifiedReport(t *testing.T) {

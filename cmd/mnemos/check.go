@@ -607,13 +607,16 @@ func benchmarkSignal(dataDir, logPath, project string, launch bool) CheckSignal 
 	default:
 		status = CheckFail
 	}
-	if !launch && status == CheckFail {
-		status = CheckWarn
+	explanation := "Benchmark evidence is optional for daily product health."
+	if launch {
+		explanation = "Only sessions with explicit production provenance count toward launch readiness."
+	} else {
+		status = CheckPass
 	}
 	return CheckSignal{
 		Name: "benchmark", Status: status, Critical: launch, Scope: projectScope(project),
 		Value:       fmt.Sprintf("%s, %d ON / %d OFF / %d legacy", strings.ToUpper(string(mode)), on, off, legacy),
-		Explanation: "Only sessions with explicit production provenance count toward launch readiness.",
+		Explanation: explanation,
 	}
 }
 
@@ -790,6 +793,9 @@ func addSignalActions(report *CheckReport) {
 			message = "Run or inspect autopilot compilation for projects with pending sources."
 			command = "mnemos autopilot run"
 		case "benchmark":
+			if !signal.Critical {
+				continue
+			}
 			message = "Collect provenance-marked ON and OFF benchmark sessions before launch."
 			command = "mnemos bench status"
 		case "version/package":
