@@ -28,6 +28,7 @@ func TestParseMnemosServeProcesses(t *testing.T) {
 	assert.Equal(t, "/opt/homebrew/bin/mnemos serve", processes[0].Command)
 	assert.Equal(t, 103, processes[1].PID)
 	assert.Equal(t, "mnemos serve --config /tmp/config.yaml", processes[1].Command)
+	assert.Equal(t, "/Applications/Codex.app/Contents/MacOS/Codex", processes[1].ParentCommand)
 }
 
 func TestIsMnemosServeCommand(t *testing.T) {
@@ -66,6 +67,26 @@ func TestDiagnoseProcesses_MultipleProcessesOneLeader(t *testing.T) {
 	assert.Contains(t, findings[1].Message, "PID 10")
 }
 
+func TestDiagnoseProcesses_SharedParentWarnsAboutRepeatedSpawn(t *testing.T) {
+	processes := []DoctorProcess{
+		{PID: 10, PPID: 2179, Elapsed: "11:00", Command: "mnemos serve", ParentCommand: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"},
+		{PID: 11, PPID: 2179, Elapsed: "10:00", Command: "mnemos serve", ParentCommand: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"},
+		{PID: 12, PPID: 2179, Elapsed: "09:00", Command: "mnemos serve", ParentCommand: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"},
+	}
+	info := DoctorAutopilot{LockPID: 10, LeaderRunning: true}
+
+	findings := diagnoseProcesses(processes, info)
+
+	var found bool
+	for _, finding := range findings {
+		if strings.Contains(finding.Message, "share parent PID 2179") &&
+			strings.Contains(finding.Message, "repeated servers") {
+			found = true
+		}
+	}
+	assert.True(t, found)
+}
+
 func TestDiagnoseProcesses_StaleLeaderLockFails(t *testing.T) {
 	processes := []DoctorProcess{{PID: 10, PPID: 1, Elapsed: "01:00", Command: "mnemos serve"}}
 	info := DoctorAutopilot{LockPID: 99, LeaderRunning: false}
@@ -91,7 +112,7 @@ func TestRenderDoctorProcessReport(t *testing.T) {
 		DataDir:     "/tmp/mnemos",
 		DBPath:      "/tmp/mnemos/mnemos.db",
 		ServeCount:  1,
-		Processes:   []DoctorProcess{{PID: 10, PPID: 1, Elapsed: "01:00", Command: "mnemos serve"}},
+		Processes:   []DoctorProcess{{PID: 10, PPID: 1, Elapsed: "01:00", Command: "mnemos serve", ParentCommand: "launchd"}},
 		Autopilot: DoctorAutopilot{
 			LockPID:       10,
 			LeaderRunning: true,
@@ -109,6 +130,7 @@ func TestRenderDoctorProcessReport(t *testing.T) {
 	assert.Contains(t, rendered, "Host:     test-host")
 	assert.Contains(t, rendered, "Reporter: pid=1234")
 	assert.Contains(t, rendered, "pid=10")
+	assert.Contains(t, rendered, "parent=launchd")
 	assert.Contains(t, rendered, "leader_running: true")
 	assert.Contains(t, rendered, "[WARN] sample warning")
 }

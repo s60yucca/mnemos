@@ -70,10 +70,11 @@ type DoctorLogReport struct {
 }
 
 type DoctorProcess struct {
-	PID     int    `json:"pid"`
-	PPID    int    `json:"ppid"`
-	Elapsed string `json:"elapsed"`
-	Command string `json:"command"`
+	PID           int    `json:"pid"`
+	PPID          int    `json:"ppid"`
+	Elapsed       string `json:"elapsed"`
+	Command       string `json:"command"`
+	ParentCommand string `json:"parent_command,omitempty"`
 }
 
 type DoctorAutopilot struct {
@@ -441,6 +442,23 @@ func listMnemosServeProcesses() ([]DoctorProcess, error) {
 
 func parseMnemosServeProcesses(output string) []DoctorProcess {
 	var processes []DoctorProcess
+	commandsByPID := map[int]string{}
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "PID ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		command := strings.Join(fields[3:], " ")
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		commandsByPID[pid] = command
+	}
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "PID ") {
@@ -460,10 +478,11 @@ func parseMnemosServeProcesses(output string) []DoctorProcess {
 			continue
 		}
 		processes = append(processes, DoctorProcess{
-			PID:     pid,
-			PPID:    ppid,
-			Elapsed: fields[2],
-			Command: command,
+			PID:           pid,
+			PPID:          ppid,
+			Elapsed:       fields[2],
+			Command:       command,
+			ParentCommand: commandsByPID[ppid],
 		})
 	}
 	return processes
@@ -525,6 +544,9 @@ func diagnoseProcesses(processes []DoctorProcess, autopilotInfo DoctorAutopilot)
 			Severity: CheckWarn,
 			Message:  fmt.Sprintf("%d mnemos serve processes are running. This can be normal with multiple MCP client sessions, but only one should own autopilot.", len(processes)),
 		})
+		for _, finding := range diagnoseSharedParents(processes) {
+			findings = append(findings, finding)
+		}
 	}
 	if autopilotInfo.LockPID == 0 {
 		findings = append(findings, DoctorFinding{
@@ -546,6 +568,37 @@ func diagnoseProcesses(processes []DoctorProcess, autopilotInfo DoctorAutopilot)
 		findings = append(findings, DoctorFinding{
 			Severity: CheckWarn,
 			Message:  fmt.Sprintf("Autopilot state was last written by PID %d, which is not currently running. State may be stale until the next cycle.", autopilotInfo.StatePID),
+		})
+	}
+	return findings
+}
+
+func diagnoseSharedParents(processes []DoctorProcess) []DoctorFinding {
+	type parentGroup struct {
+		count   int
+		command string
+	}
+	groups := map[int]parentGroup{}
+	for _, process := range processes {
+		group := groups[process.PPID]
+		group.count++
+		if group.command == "" {
+			group.command = process.ParentCommand
+		}
+		groups[process.PPID] = group
+	}
+	var findings []DoctorFinding
+	for ppid, group := range groups {
+		if group.count < 3 {
+			continue
+		}
+		parent := fmt.Sprintf("PID %d", ppid)
+		if group.command != "" {
+			parent = fmt.Sprintf("PID %d (%s)", ppid, group.command)
+		}
+		findings = append(findings, DoctorFinding{
+			Severity: CheckWarn,
+			Message:  fmt.Sprintf("%d mnemos serve processes share parent %s. This usually means one MCP client is spawning repeated servers or duplicate mnemos MCP entries are configured.", group.count, parent),
 		})
 	}
 	return findings
@@ -657,6 +710,9 @@ func renderDoctorProcessReport(w interface{ Write([]byte) (int, error) }, report
 	} else {
 		for _, process := range report.Processes {
 			fmt.Fprintf(w, "  pid=%d ppid=%d age=%s cmd=%s\n", process.PID, process.PPID, process.Elapsed, process.Command)
+			if process.ParentCommand != "" {
+				fmt.Fprintf(w, "    parent=%s\n", process.ParentCommand)
+			}
 		}
 	}
 	fmt.Fprintln(w)
