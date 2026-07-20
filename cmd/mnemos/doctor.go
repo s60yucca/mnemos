@@ -542,7 +542,7 @@ func diagnoseProcesses(processes []DoctorProcess, autopilotInfo DoctorAutopilot)
 	default:
 		findings = append(findings, DoctorFinding{
 			Severity: CheckWarn,
-			Message:  fmt.Sprintf("%d mnemos serve processes are running. This can be normal with multiple MCP client sessions, but only one should own autopilot.", len(processes)),
+			Message:  fmt.Sprintf("%d mnemos serve processes are running. This can be normal with multiple MCP client sessions. Do not kill non-leader processes individually; they may still be active MCP transports.", len(processes)),
 		})
 		for _, finding := range diagnoseSharedParents(processes) {
 			findings = append(findings, finding)
@@ -598,7 +598,7 @@ func diagnoseSharedParents(processes []DoctorProcess) []DoctorFinding {
 		}
 		findings = append(findings, DoctorFinding{
 			Severity: CheckWarn,
-			Message:  fmt.Sprintf("%d mnemos serve processes share parent %s. This usually means one MCP client is spawning repeated servers or duplicate mnemos MCP entries are configured.", group.count, parent),
+			Message:  fmt.Sprintf("%d mnemos serve processes share parent %s. This usually means one MCP client is spawning repeated servers or duplicate mnemos MCP entries are configured. Prefer restarting that client or fixing duplicate config over killing individual transports.", group.count, parent),
 		})
 	}
 	return findings

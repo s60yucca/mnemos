@@ -125,7 +125,7 @@ mnemos version
 mnemos doctor all
 ```
 
-Then ask your agent to call `mnemos_runtime`. That reports the actual MCP server process handling tool calls, including `version`, `host`, `pid`, `started_at`, `executable`, `data_dir`, and `project_id`. If it still shows an old version, close the MCP client, stop stale servers with `pkill -f "mnemos serve"`, and reopen the client.
+Then ask your agent to call `mnemos_runtime`. That reports the actual MCP server process handling tool calls, including `version`, `host`, `pid`, `started_at`, `executable`, `data_dir`, and `project_id`. If it still shows an old version, close the MCP client and reopen it. Use `pkill -f "mnemos serve"` only after closing active MCP clients, or when you intentionally accept reconnecting all active Mnemos transports.
 
 You can validate the returned JSON with:
 

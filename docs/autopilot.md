@@ -117,7 +117,7 @@ After installing a new Mnemos version:
 3. Call `mnemos_runtime` from the agent to verify the live MCP server process.
 4. Save or paste that JSON into `mnemos doctor runtime --from-json <json-or-file>` or `mnemos check --mcp-runtime <json-or-file>`.
 
-If `mnemos_runtime.version` is older than `mnemos version`, the MCP client is still connected to a stale server. Close the client, run `pkill -f "mnemos serve"` if needed, reopen the client, and call `mnemos_runtime` again.
+If `mnemos_runtime.version` is older than `mnemos version`, the MCP client is still connected to a stale server. Close the client, reopen it, and call `mnemos_runtime` again. Use `pkill -f "mnemos serve"` only after closing active MCP clients, or when you intentionally accept reconnecting all active Mnemos transports.
 
 Daily `mnemos check` treats MCP runtime validation as optional. Use `mnemos check --launch --mcp-runtime <json-or-file>` for public-launch gates or after package upgrades.
 

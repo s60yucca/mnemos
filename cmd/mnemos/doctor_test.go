@@ -63,6 +63,7 @@ func TestDiagnoseProcesses_MultipleProcessesOneLeader(t *testing.T) {
 
 	assert.Equal(t, CheckWarn, findings[0].Severity)
 	assert.Contains(t, findings[0].Message, "2 mnemos serve")
+	assert.Contains(t, findings[0].Message, "Do not kill non-leader")
 	assert.Equal(t, CheckPass, findings[1].Severity)
 	assert.Contains(t, findings[1].Message, "PID 10")
 }
@@ -80,7 +81,8 @@ func TestDiagnoseProcesses_SharedParentWarnsAboutRepeatedSpawn(t *testing.T) {
 	var found bool
 	for _, finding := range findings {
 		if strings.Contains(finding.Message, "share parent PID 2179") &&
-			strings.Contains(finding.Message, "repeated servers") {
+			strings.Contains(finding.Message, "repeated servers") &&
+			strings.Contains(finding.Message, "restarting that client") {
 			found = true
 		}
 	}
